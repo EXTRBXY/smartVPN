@@ -6,26 +6,20 @@ Android-first мобильный VPN-клиент с архитектурным 
 
 - Базовая Gradle/KMP структура: `androidApp` + `shared`.
 - Shared-слой с первичными моделями и портами.
-- Android runtime-заготовка `SingBoxBinaryInstaller` для установки бинарника из assets.
+- Android: встраивание **libbox** (`androidApp/libs/libbox.aar`) и `VpnService` по образцу SFA (`CommandServer` + `PlatformInterface`).
 - Архитектурное правило Cursor в `.cursor/rules/`.
 
 ## Структура проекта
 
 - `androidApp` — Android приложение и platform-адаптеры (`VpnService`, runtime, permissions).
 - `shared` — Kotlin Multiplatform shared-логика (`domain` + `application`).
-- `androidApp/src/main/assets/singbox/arm64-v8a/` — место для бинарника `sing-box`.
-- `sing-box-1.13.9-android-arm64/` — ваш исходный скачанный архив (рабочая папка).
+- `androidApp/libs/libbox.aar` — нативная обёртка sing-box (libbox), не коммитится без артефакта.
 
 ## Что сделать вручную (обязательно)
 
 1. Установить Android Studio (последняя стабильная), Android SDK и JDK 17.
-2. Сгенерировать Gradle Wrapper в корне проекта:
-   - `gradle wrapper --gradle-version 8.9`
-3. Скопировать бинарник:
-   - из `sing-box-1.13.9-android-arm64/sing-box`
-   - в `androidApp/src/main/assets/singbox/arm64-v8a/sing-box`
-4. Открыть проект в Android Studio и выполнить Gradle Sync.
-5. Добавить launcher Activity и `VpnService` implementation.
+2. Собрать или получить **`libbox.aar`** (тот же модуль, что в sing-box-for-android) и положить в **`androidApp/libs/libbox.aar`** (см. сообщение задачи `checkLibboxAar` при сборке).
+3. Открыть проект в Android Studio и выполнить Gradle Sync.
 
 ## Следующие инженерные шаги
 

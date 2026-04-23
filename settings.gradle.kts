@@ -14,6 +14,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Локальный libbox.aar: flatDir даёт нормальный AAR-metadata/extract; files() даёт extractedFolder=null на AGP 8+.
+        flatDir {
+            dirs(rootDir.resolve("androidApp/libs"))
+        }
     }
 }
 

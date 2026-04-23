@@ -1,0 +1,165 @@
+package com.nothing.mobilevpn.shared.infrastructure
+
+import com.nothing.mobilevpn.shared.application.SingBoxConfigCompilerPort
+import com.nothing.mobilevpn.shared.domain.DnsMode
+import com.nothing.mobilevpn.shared.domain.VlessProfile
+import com.nothing.mobilevpn.shared.domain.TunnelPolicy
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+
+class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
+
+    private val format = Json { prettyPrint = true }
+
+    override fun compile(profile: VlessProfile, policy: TunnelPolicy): String {
+        val json = buildJsonObject {
+            put("log", buildJsonObject { put("level", JsonPrimitive(policy.singBoxLogLevel)) })
+            buildDns(policy)?.let { put("dns", it) }
+            put("inbounds", buildJsonArray { add(buildTunInbound(profile, policy)) })
+            put("outbounds", buildOutbounds(profile))
+            put("route", buildRoute(policy))
+        }
+        return format.encodeToString(JsonElement.serializer(), json)
+    }
+
+    private fun buildTunInbound(profile: VlessProfile, policy: TunnelPolicy): JsonObject =
+        buildJsonObject {
+            put("type", JsonPrimitive("tun"))
+            put("tag", JsonPrimitive("tun-in"))
+            put("address", buildJsonArray { add(JsonPrimitive(policy.tunIpv4Cidr)) })
+            put("mtu", JsonPrimitive(policy.mtu))
+            // Android + libbox: маршруты и DNS приходят в TunOptions для VpnService.Builder (как в SFA).
+            put("auto_route", JsonPrimitive(true))
+            put("strict_route", JsonPrimitive(true))
+            val stack = policy.tunStack.trim().lowercase().ifEmpty { "mixed" }
+            put("stack", JsonPrimitive(stack))
+        }
+
+    private fun buildOutbounds(profile: VlessProfile): JsonArray = buildJsonArray {
+        add(buildVlessOutbound(profile))
+        add(buildJsonObject {
+            put("type", JsonPrimitive("direct"))
+            put("tag", JsonPrimitive("direct"))
+        })
+        add(buildJsonObject {
+            put("type", JsonPrimitive("block"))
+            put("tag", JsonPrimitive("block"))
+        })
+    }
+
+    private fun buildVlessOutbound(profile: VlessProfile): JsonObject = buildJsonObject {
+        put("type", JsonPrimitive("vless"))
+        put("tag", JsonPrimitive("proxy"))
+        put("server", JsonPrimitive(profile.host))
+        put("server_port", JsonPrimitive(profile.port))
+        put("uuid", JsonPrimitive(profile.uuid))
+        profile.flow?.let { put("flow", JsonPrimitive(it)) }
+        buildTls(profile)?.let { put("tls", it) }
+        buildTransport(profile)?.let { put("transport", it) }
+    }
+
+    private fun buildTls(profile: VlessProfile): JsonObject? {
+        if (profile.security == "none") return null
+        val serverName = profile.sni?.ifBlank { null } ?: profile.host
+        return buildJsonObject {
+            put("enabled", JsonPrimitive(true))
+            put("server_name", JsonPrimitive(serverName))
+            if (profile.alpn.isNotEmpty()) {
+                put("alpn", buildJsonArray { profile.alpn.forEach { add(JsonPrimitive(it)) } })
+            }
+            profile.fingerprint?.let { fp ->
+                put("utls", buildJsonObject {
+                    put("enabled", JsonPrimitive(true))
+                    put("fingerprint", JsonPrimitive(fp))
+                })
+            }
+            if (profile.security == "reality") {
+                put("reality", buildJsonObject {
+                    put("enabled", JsonPrimitive(true))
+                    put("public_key", JsonPrimitive(profile.realityPublicKey!!))
+                    put("short_id", JsonPrimitive(profile.realityShortId!!))
+                })
+            }
+        }
+    }
+
+    private fun buildTransport(profile: VlessProfile): JsonObject? =
+        when (profile.type) {
+            "tcp" -> null
+            "ws" -> buildJsonObject {
+                put("type", JsonPrimitive("ws"))
+                put("path", JsonPrimitive(profile.wsPath ?: "/"))
+                profile.wsHost?.let { host ->
+                    put("headers", buildJsonObject { put("Host", JsonPrimitive(host)) })
+                }
+            }
+            "grpc" -> buildJsonObject {
+                put("type", JsonPrimitive("grpc"))
+                put("service_name", JsonPrimitive(profile.grpcServiceName ?: "default"))
+            }
+            else -> null
+        }
+
+    private fun buildDns(policy: TunnelPolicy): JsonObject? =
+        when (policy.dnsMode) {
+            DnsMode.DOH -> buildJsonObject {
+                put("final", JsonPrimitive("doh"))
+                put("reverse_mapping", JsonPrimitive(true))
+                put("servers", buildJsonArray {
+                    add(buildJsonObject {
+                        put("type", JsonPrimitive("https"))
+                        put("tag", JsonPrimitive("doh"))
+                        put("server", JsonPrimitive(policy.dohServer))
+                        put("server_port", JsonPrimitive(443))
+                        put("path", JsonPrimitive(policy.dohPath))
+                        policy.dohSni?.let { sni ->
+                            put("tls", buildJsonObject {
+                                put("enabled", JsonPrimitive(true))
+                                put("server_name", JsonPrimitive(sni))
+                            })
+                        }
+                        put("detour", JsonPrimitive("proxy"))
+                    })
+                })
+            }
+            DnsMode.SYSTEM -> buildJsonObject {
+                put("final", JsonPrimitive("local"))
+                put("reverse_mapping", JsonPrimitive(true))
+                put(
+                    "servers",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("type", JsonPrimitive("local"))
+                                put("tag", JsonPrimitive("local"))
+                                put("prefer_go", JsonPrimitive(false))
+                            },
+                        )
+                    },
+                )
+            }
+        }
+
+    private fun buildRoute(policy: TunnelPolicy): JsonObject {
+        val rules = buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("port", buildJsonArray { add(JsonPrimitive(53)) })
+                    put("action", JsonPrimitive("hijack-dns"))
+                },
+            )
+        }
+        val useDoh = policy.dnsMode == DnsMode.DOH
+        return buildJsonObject {
+            put("final", JsonPrimitive("proxy"))
+            put("auto_detect_interface", JsonPrimitive(true))
+            if (useDoh) put("default_domain_resolver", JsonPrimitive("doh"))
+            put("rules", rules)
+        }
+    }
+}

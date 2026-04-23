@@ -14,7 +14,7 @@ alwaysApply: true
 - Платформы: Android (приоритет), iOS (следующий этап).
 - Язык и shared-слой: `Kotlin` / Kotlin Multiplatform.
 - VPN-интеграция:
-  - Android: `VpnService` + foreground-service lifecycle.
+  - Android: `VpnService` + foreground-service lifecycle + **официальный libbox** (`io.nekohasekai.libbox`: `CommandServer`, `PlatformInterface`, `openTun`), как в **sing-box-for-android (SFA)**. Не использовать обход через `ProcessBuilder` и отдельный CLI-бинарник в процессе приложения.
   - iOS: `Network Extension` (`PacketTunnelProvider`) как отдельный адаптер.
 
 ## Непереговорные принципы
@@ -39,7 +39,8 @@ alwaysApply: true
 - Нельзя привязывать shared-модели к Android SDK типам.
 
 ## Интеграция с sing-box
-- Источник истины: актуальная документация `sing-box` и поддерживаемая схема полей.
+- Источник истины: актуальная документация `sing-box`, `experimental/libbox` и поддерживаемая схема полей.
+- **Android:** артефакт `libbox.aar` собирается из того же дерева, что и SFA (см. `experimental/libbox/ffi.json`, `DEPLOY_ANDROID`); кладётся в `androidApp/libs/libbox.aar`.
 - Конфиг описывается как policy-модель и компилируется в валидный JSON.
 - DNS и route реализуются как конфиг-политика, а не как hardcoded ветки UI.
 - Любые режимы (`proxy`/`tun`/`per-app`) документируются как отдельные сценарии политики.

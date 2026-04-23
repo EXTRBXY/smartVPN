@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="main_welcome">Nothing Mobile VPN — заготовка. Дальше: VpnService и sing-box.</string>
+    <string name="app_name">Nothing Mobile VPN</string>
+    <string name="vpn_notification_title">VPN активен</string>
+    <string name="vpn_notification_text">sing-box</string>
+    <string name="action_disconnect">Отключить</string>
 </resources>
