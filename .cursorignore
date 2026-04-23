@@ -1,0 +1,42 @@
+# VCS / caches
+.git/
+.idea/
+.vscode/
+.gradle/
+.cursor/cache/
+
+# Build outputs
+**/build/
+out/
+bin/
+obj/
+DerivedData/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Large binaries and artifacts
+**/*.apk
+**/*.aab
+**/*.ipa
+**/*.keystore
+**/*.jks
+**/*.framework
+**/*.dSYM
+**/*.so
+**/*.dylib
+
+# Dependencies
+**/Pods/
+
+# Logs and temp
+**/*.log
+**/*.tmp
+**/*.temp
+
+# Secrets
+.env
+.env.*
+**/*.pem
+**/*.p12
+**/*.mobileprovision

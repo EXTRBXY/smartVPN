@@ -1,0 +1,61 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+
+# Cursor
+.cursor/cache/
+
+# Build outputs
+build/
+out/
+bin/
+obj/
+
+# Kotlin / Gradle
+.gradle/
+**/build/
+local.properties
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+*.keystore
+*.jks
+*.hprof
+
+# iOS / Xcode
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+Pods/
+*.ipa
+
+# KMP / native artifacts
+**/konan/
+**/*.framework
+**/*.dSYM
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Secrets / local configs
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+*.orig
