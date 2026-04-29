@@ -26,8 +26,8 @@ class SingBoxConfigCompilerTest {
     @Test
     fun compile_containsCoreKeys() {
         val json = SingBoxConfigCompiler().compile(profile, policy)
-        assertTrue(json.contains("\"type\": \"tun\""))
-        assertTrue(json.contains("\"type\": \"vless\""))
+        assertTrue(json.contains("\"type\":\"tun\"") || json.contains("\"type\": \"tun\""))
+        assertTrue(json.contains("\"type\":\"vless\"") || json.contains("\"type\": \"vless\""))
         assertTrue(json.contains("198.18.0.1/30"))
         assertTrue(json.contains("hijack-dns"))
     }

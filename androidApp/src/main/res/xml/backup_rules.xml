@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Explicit opt-out of Auto Backup (allowBackup=false); empty ruleset for audits. -->
+<full-backup-content />

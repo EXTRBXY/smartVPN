@@ -14,7 +14,8 @@ import kotlinx.serialization.json.buildJsonObject
 
 class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
 
-    private val format = Json { prettyPrint = true }
+    /** Без prettyPrint — меньше утечки структуры при дампе файла. */
+    private val format = Json { prettyPrint = false }
 
     override fun compile(profile: VlessProfile, policy: TunnelPolicy): String {
         val json = buildJsonObject {

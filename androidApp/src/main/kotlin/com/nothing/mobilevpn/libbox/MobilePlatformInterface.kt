@@ -4,8 +4,8 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Process
 import android.system.OsConstants
-import android.util.Log
 import androidx.annotation.RequiresApi
+import com.nothing.mobilevpn.platform.SafeAndroidLog
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
@@ -67,7 +67,7 @@ interface MobilePlatformInterface : PlatformInterface {
             )
             return owner
         } catch (e: Exception) {
-            Log.e("MobilePlatformInterface", "getConnectionOwnerUid", e)
+            SafeAndroidLog.e("MobilePlatformInterface", "getConnectionOwnerUid", e)
             throw e
         }
     }
@@ -119,7 +119,11 @@ interface MobilePlatformInterface : PlatformInterface {
             runCatching {
                 boxInterface.mtu = networkInterface.mtu
             }.onFailure {
-                Log.e("MobilePlatformInterface", "failed to get mtu for interface ${boxInterface.name}", it)
+                SafeAndroidLog.e(
+                    "MobilePlatformInterface",
+                    "failed to get mtu for interface ${boxInterface.name}",
+                    it,
+                )
             }
             boxInterface.addresses =
                 StringArray(

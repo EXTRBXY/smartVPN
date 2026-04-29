@@ -7,10 +7,11 @@ import java.io.File
 class AndroidSessionConfigWriter(
     context: Context,
 ) : SessionConfigWriter {
-    private val cacheDir = context.applicationContext.cacheDir
+    /** Не попадает в автобэкап; только каталог приложения. */
+    private val dir = context.applicationContext.noBackupFilesDir.also { it.mkdirs() }
 
     override fun writeSessionConfig(json: String): String {
-        val f = File(cacheDir, "sing-box-session.json")
+        val f = File(dir, "sing-box-session.json")
         f.writeText(json)
         return f.absolutePath
     }

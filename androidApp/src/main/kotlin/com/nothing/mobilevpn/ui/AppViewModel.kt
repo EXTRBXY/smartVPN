@@ -86,7 +86,7 @@ class AppViewModel(
     }
 
     suspend fun singBoxVersion(): String =
-        graph.runtime.version()
+        controller.singBoxCoreVersion().getOrElse { throw it }
 
     class Factory(
         private val graph: NothingVpnGraph,

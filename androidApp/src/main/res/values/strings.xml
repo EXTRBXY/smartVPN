@@ -4,4 +4,11 @@
     <string name="vpn_notification_title">VPN активен</string>
     <string name="vpn_notification_text">sing-box</string>
     <string name="action_disconnect">Отключить</string>
+    <string name="qs_tile_label">Nothing VPN</string>
+    <string name="qs_tile_subtitle_on">Включён</string>
+    <string name="qs_tile_subtitle_off">Выключен</string>
+    <string name="qs_tile_no_profile">Нет профиля</string>
+    <string name="qs_tile_no_profile_toast">Сначала добавьте профиль в приложении</string>
+    <string name="qs_tile_need_vpn_permission">Откройте приложение и разрешите VPN</string>
+    <string name="qs_tile_per_app_empty">Укажите приложения для режима «только выбранные»</string>
 </resources>

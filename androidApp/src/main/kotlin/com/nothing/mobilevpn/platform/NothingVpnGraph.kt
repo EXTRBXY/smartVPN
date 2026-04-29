@@ -11,14 +11,14 @@ class NothingVpnGraph(context: Context) {
     val profileRepository = ProfileRepositoryAndroid(appContext)
     val secureStore = SecureStoreAndroid(appContext)
     val configCompiler: SingBoxConfigCompilerPort = SingBoxConfigCompiler()
-    val runtime = SingBoxAndroidRuntime(appContext)
+    val singBoxCoreInfo = AndroidSingBoxCoreInfo(appContext)
     val systemVpn = AndroidSystemVpn(appContext)
     val sessionConfigWriter = AndroidSessionConfigWriter(appContext)
 
     val sessionController = VpnSessionController(
         profileRepository = profileRepository,
         configCompiler = configCompiler,
-        runtime = runtime,
+        singBoxCoreInfo = singBoxCoreInfo,
         systemVpn = systemVpn,
         configWriter = sessionConfigWriter,
     )

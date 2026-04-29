@@ -1,25 +1,15 @@
 package com.nothing.mobilevpn.platform
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import android.content.SharedPreferences
 import com.nothing.mobilevpn.shared.application.ProfileRepositoryPort
 import com.nothing.mobilevpn.shared.domain.TunnelPolicy
 import com.nothing.mobilevpn.shared.domain.VlessProfile
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
-
-private val Context.profileDataStore by preferencesDataStore(name = "nothing_mobile_vpn")
-
-private object PrefsKeys {
-    val profiles = stringPreferencesKey("profiles_json")
-    val activeId = stringPreferencesKey("active_profile_id")
-    val policy = stringPreferencesKey("tunnel_policy_json")
-}
 
 private val json = Json {
     ignoreUnknownKeys = true
@@ -31,52 +21,81 @@ private val listSerializer = ListSerializer(VlessProfile.serializer())
 class ProfileRepositoryAndroid(
     context: Context,
 ) : ProfileRepositoryPort {
-    private val appContext = context.applicationContext
-    private val store = appContext.profileDataStore
 
-    override fun observeProfiles(): Flow<List<VlessProfile>> = store.data.map { pref ->
-        val raw = pref[PrefsKeys.profiles] ?: "[]"
-        json.decodeFromString(listSerializer, raw)
+    private val appContext = context.applicationContext
+    private val prefs: SharedPreferences = VpnEncryption.profilePreferences(appContext)
+
+    override fun observeProfiles(): Flow<List<VlessProfile>> = callbackFlow {
+        ProfileStorageMigration.awaitProfileStorageReady()
+        fun emitList() {
+            val raw = prefs.getString(ProfileStorageMigration.KEY_PROFILES, null) ?: "[]"
+            trySend(json.decodeFromString(listSerializer, raw))
+        }
+        emitList()
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (key == ProfileStorageMigration.KEY_PROFILES) emitList()
+            }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    override suspend fun listProfiles(): List<VlessProfile> = observeProfiles().first()
+    override suspend fun listProfiles(): List<VlessProfile> {
+        ProfileStorageMigration.awaitProfileStorageReady()
+        val raw = prefs.getString(ProfileStorageMigration.KEY_PROFILES, null) ?: "[]"
+        return json.decodeFromString(listSerializer, raw)
+    }
 
     override suspend fun upsert(profile: VlessProfile) {
-        store.edit { pref ->
-            val current = json.decodeFromString(listSerializer, pref[PrefsKeys.profiles] ?: "[]").toMutableList()
-            val idx = current.indexOfFirst { it.id == profile.id }
-            if (idx >= 0) current[idx] = profile else current.add(profile)
-            pref[PrefsKeys.profiles] = json.encodeToString(listSerializer, current)
-        }
+        ProfileStorageMigration.awaitProfileStorageReady()
+        val current =
+            json.decodeFromString(
+                listSerializer,
+                prefs.getString(ProfileStorageMigration.KEY_PROFILES, null) ?: "[]",
+            ).toMutableList()
+        val idx = current.indexOfFirst { it.id == profile.id }
+        if (idx >= 0) current[idx] = profile else current.add(profile)
+        prefs.edit()
+            .putString(ProfileStorageMigration.KEY_PROFILES, json.encodeToString(listSerializer, current))
+            .apply()
     }
 
     override suspend fun delete(profileId: String) {
-        store.edit { pref ->
-            val current = json.decodeFromString(listSerializer, pref[PrefsKeys.profiles] ?: "[]")
-                .filterNot { it.id == profileId }
-            pref[PrefsKeys.profiles] = json.encodeToString(listSerializer, current)
-            if (pref[PrefsKeys.activeId] == profileId) {
-                pref.remove(PrefsKeys.activeId)
-            }
+        ProfileStorageMigration.awaitProfileStorageReady()
+        val current =
+            json.decodeFromString(
+                listSerializer,
+                prefs.getString(ProfileStorageMigration.KEY_PROFILES, null) ?: "[]",
+            ).filterNot { it.id == profileId }
+        val ed = prefs.edit().putString(ProfileStorageMigration.KEY_PROFILES, json.encodeToString(listSerializer, current))
+        if (prefs.getString(ProfileStorageMigration.KEY_ACTIVE_ID, null) == profileId) {
+            ed.remove(ProfileStorageMigration.KEY_ACTIVE_ID)
         }
+        ed.apply()
     }
 
-    override suspend fun getActiveProfileId(): String? = store.data.first()[PrefsKeys.activeId]
+    override suspend fun getActiveProfileId(): String? {
+        ProfileStorageMigration.awaitProfileStorageReady()
+        return prefs.getString(ProfileStorageMigration.KEY_ACTIVE_ID, null)
+    }
 
     override suspend fun setActiveProfileId(id: String?) {
-        store.edit { pref ->
-            if (id == null) pref.remove(PrefsKeys.activeId) else pref[PrefsKeys.activeId] = id
-        }
+        ProfileStorageMigration.awaitProfileStorageReady()
+        val ed = prefs.edit()
+        if (id == null) ed.remove(ProfileStorageMigration.KEY_ACTIVE_ID) else ed.putString(ProfileStorageMigration.KEY_ACTIVE_ID, id)
+        ed.apply()
     }
 
     override suspend fun getTunnelPolicy(): TunnelPolicy {
-        val raw = store.data.first()[PrefsKeys.policy] ?: return TunnelPolicy()
+        ProfileStorageMigration.awaitProfileStorageReady()
+        val raw = prefs.getString(ProfileStorageMigration.KEY_POLICY, null) ?: return TunnelPolicy()
         return json.decodeFromString(TunnelPolicy.serializer(), raw)
     }
 
     override suspend fun setTunnelPolicy(policy: TunnelPolicy) {
-        store.edit { pref ->
-            pref[PrefsKeys.policy] = json.encodeToString(TunnelPolicy.serializer(), policy)
-        }
+        ProfileStorageMigration.awaitProfileStorageReady()
+        prefs.edit()
+            .putString(ProfileStorageMigration.KEY_POLICY, json.encodeToString(TunnelPolicy.serializer(), policy))
+            .apply()
     }
 }

@@ -15,6 +15,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.nothing.mobilevpn.BuildConfig
 import com.nothing.mobilevpn.MainActivity
 import com.nothing.mobilevpn.NothingVpnApp
 import com.nothing.mobilevpn.R
@@ -22,7 +23,9 @@ import com.nothing.mobilevpn.libbox.DefaultNetworkMonitor
 import com.nothing.mobilevpn.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilevpn.libbox.MobilePlatformInterface
 import com.nothing.mobilevpn.libbox.toAndroidIpPrefix
+import com.nothing.mobilevpn.platform.SafeAndroidLog
 import com.nothing.mobilevpn.shared.domain.RoutingMode
+import com.nothing.mobilevpn.shared.infrastructure.LogRedaction
 import com.nothing.mobilevpn.shared.domain.TunnelPolicy
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.CommandServerHandler
@@ -67,6 +70,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
                 teardown()
+                VpnRunningState.publish(this, false)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -86,7 +90,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                         connectSuspend(policy, configPath)
                     }.onFailure { e ->
                         sendConnectResult(false, e.message ?: "connectVpn_failed")
-                        Log.e(VPN_LOG_TAG, "connectVpn failed", e)
+                        SafeAndroidLog.e(VPN_LOG_TAG, "connectVpn failed", e)
                         teardown()
                         stopSelf()
                     }
@@ -99,6 +103,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
 
     override fun onDestroy() {
         teardown()
+        VpnRunningState.publish(applicationContext, false)
         super.onDestroy()
     }
 
@@ -262,6 +267,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
 
     private suspend fun connectSuspend(policy: TunnelPolicy, configPath: String) {
         teardown()
+        VpnRunningState.publish(this, false)
         LibboxAndroidBootstrap.ensureSetup()
         sessionConfigPath = configPath
         lastPolicy = policy
@@ -307,6 +313,9 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         }
 
     private fun teardown() {
+        sessionConfigPath?.let { path ->
+            runCatching { File(path).delete() }
+        }
         tunPfd?.close()
         tunPfd = null
         runBlocking {
@@ -323,6 +332,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     }
 
     private fun sendConnectResult(ok: Boolean, message: String?) {
+        VpnRunningState.publish(this, ok)
         sendBroadcast(
             Intent(VpnConnectResultContract.ACTION).apply {
                 setPackage(packageName)
@@ -371,7 +381,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                 runCatching {
                     val json = File(path).readText()
                     commandServer.startOrReloadService(json, buildOverrideOptions(pol))
-                }.onFailure { Log.e(VPN_LOG_TAG, "serviceReload", it) }
+                }.onFailure { SafeAndroidLog.e(VPN_LOG_TAG, "serviceReload", it) }
             }
         }
 
@@ -391,7 +401,9 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         }
 
         override fun writeDebugMessage(message: String?) {
-            if (message != null) Log.d("sing-box", message)
+            if (BuildConfig.DEBUG && message != null) {
+                Log.d("sing-box", LogRedaction.redactForLog(message))
+            }
         }
     }
 

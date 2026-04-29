@@ -6,13 +6,20 @@ import android.app.NotificationManager
 import android.os.Build
 import com.nothing.mobilevpn.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilevpn.platform.NothingVpnGraph
+import com.nothing.mobilevpn.platform.ProfileStorageMigration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 class NothingVpnApp : Application() {
+
+    private val appStartScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val graph by lazy { NothingVpnGraph(this) }
 
     override fun onCreate() {
         super.onCreate()
+        ProfileStorageMigration.startProfileStorageMigration(this, appStartScope)
         LibboxAndroidBootstrap.attachBase(this)
         LibboxAndroidBootstrap.ensureSetup()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

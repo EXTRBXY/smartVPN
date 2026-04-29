@@ -4,9 +4,11 @@ import com.nothing.mobilevpn.shared.domain.TunnelPolicy
 import com.nothing.mobilevpn.shared.domain.VlessProfile
 import kotlinx.coroutines.flow.Flow
 
-interface SingBoxRuntimePort {
-    suspend fun start(configPath: String)
-    suspend fun stop()
+/**
+ * Только чтение сведений о встроенном ядре sing-box (libbox): версия и т.п.
+ * Запуск/остановка трафика и [CommandServer] — у [SystemVpnPort] и платформенного VPN-сервиса.
+ */
+fun interface SingBoxCoreInfoPort {
     suspend fun version(): String
 }
 

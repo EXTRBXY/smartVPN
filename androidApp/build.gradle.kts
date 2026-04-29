@@ -14,9 +14,9 @@ val libboxAar: File = file("libs/libbox.aar")
 tasks.register("checkLibboxAar") {
     doLast {
         require(libboxAar.isFile) {
-            "Нет ${libboxAar.invariantSeparatorsPath}. Соберите AAR из sing-box experimental/libbox " +
-                "(target android-main, см. experimental/libbox/ffi.json → DEPLOY_ANDROID) " +
-                "или скопируйте libbox.aar из локальной сборки sing-box-for-android в androidApp/libs/."
+            "Нет ${libboxAar.invariantSeparatorsPath}. Соберите AAR: sing-box cmd/internal/build_libbox -target android " +
+                "(все ABI) или scripts/build-libbox-aar.ps1 при клоне sing-box в <родитель mobileVPN>/_deps/sing-box; " +
+                "см. experimental/libbox/ffi.json → DEPLOY_ANDROID."
         }
     }
 }
@@ -43,7 +43,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isDebuggable = false
+            isMinifyEnabled = true
+            // Подпись debug-keystore: APK ставится через adb/APK без отдельного keystore (не для магазина).
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -85,4 +88,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+/** Release APK: isDebuggable=false, R8, без debugImplementation-артефактов; подпись debug-keystore для локальной установки. */
+tasks.register("nonDebugApk") {
+    group = "build"
+    description =
+        "Собирает release APK без режима отладки (для установки знакомым; не для магазина). Выход: build/outputs/apk/release/"
+    dependsOn("assembleRelease")
 }

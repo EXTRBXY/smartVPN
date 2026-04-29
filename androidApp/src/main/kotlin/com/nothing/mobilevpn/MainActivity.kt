@@ -2,6 +2,11 @@ package com.nothing.mobilevpn
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.view.WindowManager
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.VpnService
@@ -33,6 +38,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import com.nothing.mobilevpn.ui.NothingVpnTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -59,9 +65,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.nothing.mobilevpn.BuildConfig
 import com.nothing.mobilevpn.shared.domain.RoutingMode
 import com.nothing.mobilevpn.shared.domain.VpnSessionState
 import com.nothing.mobilevpn.ui.AppViewModel
+import com.nothing.mobilevpn.vpn.VpnRunningState
+import com.nothing.mobilevpn.vpn.VpnRunningStateContract
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,6 +88,14 @@ private fun appIconCacheKey(packageName: String, sizePx: Int): String = "$packag
 
 class MainActivity : ComponentActivity() {
 
+    private val vpnRunningReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != VpnRunningStateContract.ACTION) return
+            val running = intent.getBooleanExtra(VpnRunningStateContract.EXTRA_RUNNING, false)
+            (application as NothingVpnApp).graph.sessionController.applyExternalTunnelRunning(running)
+        }
+    }
+
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -92,12 +109,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!BuildConfig.DEBUG) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE,
+            )
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
         }
         val graph = (application as NothingVpnApp).graph
         setContent {
-            MaterialTheme {
+            NothingVpnTheme {
                 val vm: AppViewModel = viewModel(factory = AppViewModel.Factory(graph))
                 val nav = rememberNavController()
                 NavHost(navController = nav, startDestination = "home") {
@@ -126,6 +149,26 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(VpnRunningStateContract.ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(vpnRunningReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(vpnRunningReceiver, filter)
+        }
+        VpnRunningState.syncFromDisk(this)
+        (application as NothingVpnApp).graph.sessionController.applyExternalTunnelRunning(
+            VpnRunningState.isRunning,
+        )
+    }
+
+    override fun onStop() {
+        runCatching { unregisterReceiver(vpnRunningReceiver) }
+        super.onStop()
     }
 }
 

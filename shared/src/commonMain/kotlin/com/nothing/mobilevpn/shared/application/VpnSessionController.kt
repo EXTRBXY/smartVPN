@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 class VpnSessionController(
     private val profileRepository: ProfileRepositoryPort,
     private val configCompiler: SingBoxConfigCompilerPort,
-    private val runtime: SingBoxRuntimePort,
+    private val singBoxCoreInfo: SingBoxCoreInfoPort,
     private val systemVpn: SystemVpnPort,
     private val configWriter: SessionConfigWriter,
 ) {
@@ -80,8 +80,24 @@ class VpnSessionController(
         }
     }
 
-    suspend fun runtimeVersion(): Result<String> = withContext(Dispatchers.Default) {
-        runCatching { runtime.version() }
+    suspend fun singBoxCoreVersion(): Result<String> = withContext(Dispatchers.Default) {
+        runCatching { singBoxCoreInfo.version() }
+    }
+
+    /**
+     * Туннель поднят или остановлен вне этого контроллера (плитка Quick Settings и т.п.).
+     * Не вызывает [SystemVpnPort], только выравнивает [state] с реальностью.
+     */
+    fun applyExternalTunnelRunning(running: Boolean) {
+        if (running) {
+            _lastError.value = null
+            if (_state.value !is VpnSessionState.Connected) {
+                _state.value = VpnSessionState.Connected
+            }
+        } else {
+            if (_state.value is VpnSessionState.Disconnected) return
+            _state.value = VpnSessionState.Disconnected
+        }
     }
 }
 
