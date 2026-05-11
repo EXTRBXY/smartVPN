@@ -1,8 +1,9 @@
-package com.nothing.mobilevpn.vpn
+package com.nothing.mobilecore.vpn
 
 import android.content.Context
 import android.content.Intent
-import com.nothing.mobilevpn.quicksettings.VpnQuickTileRefresh
+import android.app.ActivityManager
+import com.nothing.mobilecore.quicksettings.VpnQuickTileRefresh
 
 object VpnRunningState {
     private const val PREFS = "nothing_vpn_running_flag"
@@ -13,7 +14,16 @@ object VpnRunningState {
         private set
 
     fun syncFromDisk(context: Context) {
-        isRunning = readPersisted(context)
+        val persisted = readPersisted(context)
+        val runtime = isServiceRunning(context)
+        isRunning = persisted || runtime
+        if (isRunning != persisted) {
+            context.applicationContext
+                .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY, isRunning)
+                .apply()
+        }
     }
 
     fun readPersisted(context: Context): Boolean =
@@ -33,7 +43,16 @@ object VpnRunningState {
                 setPackage(app.packageName)
                 putExtra(VpnRunningStateContract.EXTRA_RUNNING, running)
             },
+            VpnInternalBroadcastSecurity.PERMISSION,
         )
         VpnQuickTileRefresh.requestUpdate(app)
+    }
+
+    private fun isServiceRunning(context: Context): Boolean {
+        val am = context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            ?: return false
+        @Suppress("DEPRECATION")
+        return am.getRunningServices(Int.MAX_VALUE)
+            .any { it.service.className == "com.nothing.mobilecore.vpn.NothingVpnService" }
     }
 }

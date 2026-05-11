@@ -1,11 +1,11 @@
-package com.nothing.mobilevpn.vpn
+package com.nothing.mobilecore.vpn
 
 /**
  * Результат попытки поднять sing-box после [NothingVpnService.ACTION_CONNECT].
  * Отправляется только в пакет приложения ([Intent.setPackage]).
  */
 object VpnConnectResultContract {
-    const val ACTION = "com.nothing.mobilevpn.action.VPN_CONNECT_RESULT"
+    const val ACTION = "com.nothing.mobilecore.action.VPN_CONNECT_RESULT"
     const val EXTRA_OK = "ok"
     const val EXTRA_MESSAGE = "message"
 }

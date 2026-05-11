@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.quicksettings
+package com.nothing.mobilecore.quicksettings
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -10,24 +10,19 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.widget.Toast
-import androidx.core.content.ContextCompat
-import com.nothing.mobilevpn.MainActivity
-import com.nothing.mobilevpn.R
-import com.nothing.mobilevpn.platform.AndroidSessionConfigWriter
-import com.nothing.mobilevpn.platform.ProfileRepositoryAndroid
-import com.nothing.mobilevpn.shared.domain.RoutingMode
-import com.nothing.mobilevpn.shared.domain.TunnelPolicy
-import com.nothing.mobilevpn.shared.infrastructure.SingBoxConfigCompiler
-import com.nothing.mobilevpn.vpn.NothingVpnService
-import com.nothing.mobilevpn.vpn.VpnRunningState
-import com.nothing.mobilevpn.vpn.VpnRunningStateContract
+import com.nothing.mobilecore.NothingVpnApp
+import com.nothing.mobilecore.MainActivity
+import com.nothing.mobilecore.R
+import com.nothing.mobilecore.ui.UserErrorText
+import com.nothing.mobilecore.vpn.VpnInternalBroadcastSecurity
+import com.nothing.mobilecore.vpn.VpnRunningState
+import com.nothing.mobilecore.vpn.VpnRunningStateContract
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 
 /**
  * Плитка в быстрых настройках (шторка): вкл/выкл VPN по активному профилю.
@@ -36,7 +31,7 @@ import kotlinx.serialization.json.Json
 class VpnQuickTileService : TileService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val policyJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
+    private val graph by lazy { (application as NothingVpnApp).graph }
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -44,8 +39,7 @@ class VpnQuickTileService : TileService() {
             val running = intent.getBooleanExtra(VpnRunningStateContract.EXTRA_RUNNING, false)
             scope.launch(Dispatchers.Default) {
                 VpnRunningState.syncFromDisk(this@VpnQuickTileService)
-                val repo = ProfileRepositoryAndroid(this@VpnQuickTileService)
-                val hasProfile = repo.getActiveProfileId() != null
+                val hasProfile = graph.profileRepository.getActiveProfileId() != null
                 withContext(Dispatchers.Main) {
                     if (!hasProfile) {
                         setUnavailableTile()
@@ -62,14 +56,24 @@ class VpnQuickTileService : TileService() {
         VpnRunningState.syncFromDisk(this)
         val filter = IntentFilter(VpnRunningStateContract.ACTION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(
+                stateReceiver,
+                filter,
+                VpnInternalBroadcastSecurity.PERMISSION,
+                null,
+                Context.RECEIVER_NOT_EXPORTED,
+            )
         } else {
             @Suppress("DEPRECATION")
-            registerReceiver(stateReceiver, filter)
+            registerReceiver(
+                stateReceiver,
+                filter,
+                VpnInternalBroadcastSecurity.PERMISSION,
+                null,
+            )
         }
         scope.launch(Dispatchers.Default) {
-            val repo = ProfileRepositoryAndroid(this@VpnQuickTileService)
-            val hasProfile = repo.getActiveProfileId() != null
+            val hasProfile = graph.profileRepository.getActiveProfileId() != null
             withContext(Dispatchers.Main) {
                 if (!hasProfile) {
                     setUnavailableTile()
@@ -96,9 +100,9 @@ class VpnQuickTileService : TileService() {
 
     private fun handleClick() {
         if (VpnRunningState.isRunning) {
-            startService(
-                Intent(this, NothingVpnService::class.java).setAction(NothingVpnService.ACTION_DISCONNECT),
-            )
+            scope.launch(Dispatchers.Default) {
+                graph.sessionController.disconnectSuspend()
+            }
             return
         }
         if (VpnService.prepare(this) != null) {
@@ -111,10 +115,7 @@ class VpnQuickTileService : TileService() {
             return
         }
         scope.launch(Dispatchers.Default) {
-            val repo = ProfileRepositoryAndroid(this@VpnQuickTileService)
-            val writer = AndroidSessionConfigWriter(this@VpnQuickTileService)
-            val compiler = SingBoxConfigCompiler()
-            val activeId = repo.getActiveProfileId()
+            val activeId = graph.profileRepository.getActiveProfileId()
             if (activeId == null) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
@@ -125,7 +126,7 @@ class VpnQuickTileService : TileService() {
                 }
                 return@launch
             }
-            val profile = repo.listProfiles().find { it.id == activeId }
+            val profile = graph.profileRepository.listProfiles().find { it.id == activeId }
             if (profile == null) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
@@ -136,38 +137,16 @@ class VpnQuickTileService : TileService() {
                 }
                 return@launch
             }
-            val policy = repo.getTunnelPolicy()
-            if (policy.routingMode == RoutingMode.PER_APP_ALLOWED && policy.allowedPackageNames.isEmpty()) {
+            val result = graph.sessionController.connectSuspend()
+            if (result.isFailure) {
+                val err = result.exceptionOrNull()
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         this@VpnQuickTileService,
-                        R.string.qs_tile_per_app_empty,
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-                return@launch
-            }
-            val path = try {
-                val json = compiler.compile(profile, policy)
-                writer.writeSessionConfig(json)
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@VpnQuickTileService,
-                        e.message ?: "config",
+                        UserErrorText.from(this@VpnQuickTileService, err?.message),
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
-                return@launch
-            }
-            val policyStr = policyJson.encodeToString(TunnelPolicy.serializer(), policy)
-            withContext(Dispatchers.Main) {
-                val intent = Intent(this@VpnQuickTileService, NothingVpnService::class.java).apply {
-                    action = NothingVpnService.ACTION_CONNECT
-                    putExtra(NothingVpnService.EXTRA_CONFIG_PATH, path)
-                    putExtra(NothingVpnService.EXTRA_POLICY_JSON, policyStr)
-                }
-                ContextCompat.startForegroundService(this@VpnQuickTileService, intent)
             }
         }
     }

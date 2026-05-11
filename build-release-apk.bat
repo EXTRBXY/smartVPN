@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-echo Building release APK ^(not debuggable, R8, debug keystore for local install^)...
+echo Building localRelease APK ^(not debuggable, R8, debug keystore for local install^)...
 call gradlew.bat :androidApp:nonDebugApk
 if errorlevel 1 (
     echo Build failed.
@@ -11,5 +11,5 @@ if errorlevel 1 (
 
 echo.
 echo Done. Install this file on the phone:
-echo   %~dp0androidApp\build\outputs\apk\release\androidApp-release.apk
+echo   %~dp0androidApp\build\outputs\apk\localRelease\androidApp-localRelease.apk
 exit /b 0

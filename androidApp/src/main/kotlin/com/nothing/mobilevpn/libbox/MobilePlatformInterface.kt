@@ -1,11 +1,11 @@
-package com.nothing.mobilevpn.libbox
+package com.nothing.mobilecore.libbox
 
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Process
 import android.system.OsConstants
 import androidx.annotation.RequiresApi
-import com.nothing.mobilevpn.platform.SafeAndroidLog
+import com.nothing.mobilecore.platform.SafeAndroidLog
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
@@ -28,7 +28,7 @@ import io.nekohasekai.libbox.NetworkInterface as LibboxNetworkInterface
 
 /**
  * Реализация [PlatformInterface] для Android (по мотивам SFA [PlatformInterfaceWrapper]).
- * [openTun] реализуется в [com.nothing.mobilevpn.vpn.NothingVpnService].
+ * [openTun] реализуется в [com.nothing.mobilecore.vpn.NothingVpnService].
  */
 interface MobilePlatformInterface : PlatformInterface {
     override fun usePlatformAutoDetectInterfaceControl(): Boolean = true

@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.ui
+package com.nothing.mobilecore.ui
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme

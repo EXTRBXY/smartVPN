@@ -1,6 +1,6 @@
-package com.nothing.mobilevpn.shared.infrastructure
+package com.nothing.mobilecore.shared.infrastructure
 
-import com.nothing.mobilevpn.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VlessProfile
 import okio.ByteString.Companion.toByteString
 
 object VlessLinkParser {

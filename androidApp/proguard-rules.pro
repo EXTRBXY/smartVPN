@@ -21,6 +21,6 @@
 -keepclassmembers class **$$serializer {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class com.nothing.mobilevpn.shared.**$$serializer { *; }
--keep class com.nothing.mobilevpn.shared.domain.** { *; }
--keep class com.nothing.mobilevpn.shared.application.** { *; }
+-keep,includedescriptorclasses class com.nothing.mobilecore.shared.**$$serializer { *; }
+-keep class com.nothing.mobilecore.shared.domain.** { *; }
+-keep class com.nothing.mobilecore.shared.application.** { *; }

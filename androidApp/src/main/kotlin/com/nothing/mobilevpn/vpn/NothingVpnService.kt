@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.vpn
+package com.nothing.mobilecore.vpn
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -15,18 +15,19 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import com.nothing.mobilevpn.BuildConfig
-import com.nothing.mobilevpn.MainActivity
-import com.nothing.mobilevpn.NothingVpnApp
-import com.nothing.mobilevpn.R
-import com.nothing.mobilevpn.libbox.DefaultNetworkMonitor
-import com.nothing.mobilevpn.libbox.LibboxAndroidBootstrap
-import com.nothing.mobilevpn.libbox.MobilePlatformInterface
-import com.nothing.mobilevpn.libbox.toAndroidIpPrefix
-import com.nothing.mobilevpn.platform.SafeAndroidLog
-import com.nothing.mobilevpn.shared.domain.RoutingMode
-import com.nothing.mobilevpn.shared.infrastructure.LogRedaction
-import com.nothing.mobilevpn.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.BuildConfig
+import com.nothing.mobilecore.MainActivity
+import com.nothing.mobilecore.NothingVpnApp
+import com.nothing.mobilecore.R
+import com.nothing.mobilecore.libbox.DefaultNetworkMonitor
+import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
+import com.nothing.mobilecore.libbox.MobilePlatformInterface
+import com.nothing.mobilecore.libbox.toAndroidIpPrefix
+import com.nothing.mobilecore.platform.AndroidSessionConfigWriter
+import com.nothing.mobilecore.platform.SafeAndroidLog
+import com.nothing.mobilecore.shared.domain.RoutingMode
+import com.nothing.mobilecore.shared.infrastructure.LogRedaction
+import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.CommandServerHandler
 import io.nekohasekai.libbox.OverrideOptions
@@ -37,8 +38,12 @@ import io.nekohasekai.libbox.Notification as LibboxNotification
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import java.io.File
 import android.Manifest
@@ -59,6 +64,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
 
     private var sessionConfigPath: String? = null
     private var lastPolicy: TunnelPolicy? = null
+    private val lifecycleMutex = Mutex()
 
     @Volatile
     var systemProxyAvailable = false
@@ -66,12 +72,15 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     @Volatile
     var systemProxyEnabled = false
 
+    override fun onCreate() {
+        super.onCreate()
+        AndroidSessionConfigWriter.cleanupStartupStaleOnly(applicationContext)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
-                teardown()
-                VpnRunningState.publish(this, false)
-                stopSelf()
+                requestStop(publishStopped = true, stopService = true)
                 return START_NOT_STICKY
             }
             ACTION_CONNECT -> {
@@ -86,13 +95,14 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
                 scope.launch {
-                    runCatching {
-                        connectSuspend(policy, configPath)
-                    }.onFailure { e ->
-                        sendConnectResult(false, e.message ?: "connectVpn_failed")
-                        SafeAndroidLog.e(VPN_LOG_TAG, "connectVpn failed", e)
-                        teardown()
-                        stopSelf()
+                    lifecycleMutex.withLock {
+                        runCatching {
+                            connectSuspend(policy, configPath)
+                        }.onFailure { e ->
+                            sendConnectResult(false, e.message ?: "connectVpn_failed")
+                            SafeAndroidLog.e(VPN_LOG_TAG, "connectVpn failed", e)
+                            requestStopLocked(publishStopped = true, stopService = true)
+                        }
                     }
                 }
                 return START_STICKY
@@ -101,9 +111,20 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         return START_NOT_STICKY
     }
 
+    override fun onRevoke() {
+        requestStop(publishStopped = true, stopService = true)
+        super.onRevoke()
+    }
+
     override fun onDestroy() {
-        teardown()
+        stopForegroundCompat()
+        runBlocking(Dispatchers.IO) {
+            lifecycleMutex.withLock {
+                teardown()
+            }
+        }
         VpnRunningState.publish(applicationContext, false)
+        scope.coroutineContext.cancelChildren()
         super.onDestroy()
     }
 
@@ -251,7 +272,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             if (!notification.subtitle.isNullOrBlank()) {
                 builder.setContentInfo(notification.subtitle)
             }
-            if (!notification.openURL.isNullOrBlank()) {
+            if (!notification.openURL.isNullOrBlank() && isSafeNotificationUrl(notification.openURL)) {
                 builder.setContentIntent(
                     PendingIntent.getActivity(
                         this,
@@ -268,6 +289,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     private suspend fun connectSuspend(policy: TunnelPolicy, configPath: String) {
         teardown()
         VpnRunningState.publish(this, false)
+        AndroidSessionConfigWriter.cleanupPreConnect(applicationContext, keepPath = configPath)
         LibboxAndroidBootstrap.ensureSetup()
         sessionConfigPath = configPath
         lastPolicy = policy
@@ -312,15 +334,14 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             }
         }
 
-    private fun teardown() {
+    private suspend fun teardown() {
         sessionConfigPath?.let { path ->
             runCatching { File(path).delete() }
         }
+        AndroidSessionConfigWriter.cleanupSessionConfigs(applicationContext, keepPath = null)
         tunPfd?.close()
         tunPfd = null
-        runBlocking {
-            runCatching { DefaultNetworkMonitor.stop() }
-        }
+        runCatching { DefaultNetworkMonitor.stop() }
         if (::commandServer.isInitialized) {
             runCatching { commandServer.closeService() }
             runCatching { commandServer.close() }
@@ -339,7 +360,36 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                 putExtra(VpnConnectResultContract.EXTRA_OK, ok)
                 message?.let { putExtra(VpnConnectResultContract.EXTRA_MESSAGE, it) }
             },
+            VpnInternalBroadcastSecurity.PERMISSION,
         )
+    }
+
+    private fun requestStop(publishStopped: Boolean, stopService: Boolean) {
+        scope.launch {
+            lifecycleMutex.withLock {
+                requestStopLocked(publishStopped, stopService)
+            }
+        }
+    }
+
+    private suspend fun requestStopLocked(publishStopped: Boolean, stopService: Boolean) {
+        withContext(Dispatchers.IO) { teardown() }
+        if (publishStopped) {
+            VpnRunningState.publish(applicationContext, false)
+        }
+        stopForegroundCompat()
+        if (stopService) {
+            stopSelf()
+        }
+    }
+
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
     }
 
     private fun buildNotification(): NotificationCompat.Builder {
@@ -361,6 +411,43 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             .setContentText(getString(R.string.vpn_notification_text))
             .setContentIntent(pending)
             .addAction(0, getString(R.string.action_disconnect), disconnect)
+    }
+
+    private fun isSafeNotificationUrl(raw: String?): Boolean {
+        if (raw.isNullOrBlank()) return false
+        return runCatching {
+            val uri = Uri.parse(raw)
+            val host = uri.host?.lowercase() ?: return@runCatching false
+            uri.scheme.equals("https", ignoreCase = true) &&
+                !isLocalOrPrivateHost(host)
+        }.getOrDefault(false)
+    }
+
+    private fun isLocalOrPrivateHost(host: String): Boolean {
+        val normalized = host.trim().trim('[', ']')
+        if (normalized == "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local")) {
+            return true
+        }
+        if (normalized == "::1" || normalized == "::" || normalized == "0:0:0:0:0:0:0:1") {
+            return true
+        }
+        if (normalized.contains(':')) {
+            return normalized.startsWith("fe80:") ||
+                normalized.startsWith("fc") ||
+                normalized.startsWith("fd")
+        }
+        val parts = normalized.split('.')
+        if (parts.size != 4) return false
+        val octets = parts.map { it.toIntOrNull() ?: return false }
+        val first = octets[0]
+        val second = octets[1]
+        return first == 10 ||
+            first == 127 ||
+            first == 0 ||
+            (first == 169 && second == 254) ||
+            (first == 192 && second == 168) ||
+            (first == 172 && second in 16..31) ||
+            (first == 100 && second in 64..127)
     }
 
     private inner class VpnBoxHandler : CommandServerHandler {
@@ -410,8 +497,8 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     companion object {
         const val SESSION_NAME = "NothingMobileVpn"
 
-        const val ACTION_CONNECT = "com.nothing.mobilevpn.action.CONNECT"
-        const val ACTION_DISCONNECT = "com.nothing.mobilevpn.action.DISCONNECT"
+        const val ACTION_CONNECT = "com.nothing.mobilecore.action.CONNECT"
+        const val ACTION_DISCONNECT = "com.nothing.mobilecore.action.DISCONNECT"
         const val EXTRA_CONFIG_PATH = "config_path"
         const val EXTRA_POLICY_JSON = "policy_json"
         private const val NOTIFICATION_ID = NothingVpnApp.NOTIFICATION_ID

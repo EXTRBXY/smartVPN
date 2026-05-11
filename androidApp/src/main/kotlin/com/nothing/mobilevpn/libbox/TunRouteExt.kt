@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.libbox
+package com.nothing.mobilecore.libbox
 
 import android.net.IpPrefix
 import android.os.Build

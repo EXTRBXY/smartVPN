@@ -34,7 +34,7 @@ kotlin {
 }
 
 android {
-    namespace = "com.nothing.mobilevpn.shared"
+    namespace = "com.nothing.mobilecore.shared"
     compileSdk = providers.gradleProperty("android.compileSdk").get().toInt()
     defaultConfig {
         minSdk = providers.gradleProperty("android.minSdk").get().toInt()

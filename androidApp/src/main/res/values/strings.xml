@@ -1,14 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Nothing Mobile VPN</string>
+    <string name="app_name">Nothing Mobile</string>
     <string name="vpn_notification_title">VPN активен</string>
     <string name="vpn_notification_text">sing-box</string>
     <string name="action_disconnect">Отключить</string>
-    <string name="qs_tile_label">Nothing VPN</string>
+    <string name="qs_tile_label">Nothing Mobile</string>
     <string name="qs_tile_subtitle_on">Включён</string>
     <string name="qs_tile_subtitle_off">Выключен</string>
     <string name="qs_tile_no_profile">Нет профиля</string>
     <string name="qs_tile_no_profile_toast">Сначала добавьте профиль в приложении</string>
     <string name="qs_tile_need_vpn_permission">Откройте приложение и разрешите VPN</string>
     <string name="qs_tile_per_app_empty">Укажите приложения для режима «только выбранные»</string>
+    <string name="user_error_generic">Не удалось выполнить операцию. Повторите попытку.</string>
+    <string name="user_error_select_profile">Сначала выберите активный профиль.</string>
+    <string name="user_error_split_tunnel_packages">Проверьте список приложений для раздельной маршрутизации.</string>
+    <string name="user_error_policy_network_params">Проверьте сетевые параметры VPN-политики.</string>
+    <string name="user_error_doh_params">Проверьте параметры DNS over HTTPS.</string>
+    <string name="user_error_timeout">Не удалось подключиться вовремя. Проверьте интернет и попробуйте снова.</string>
+    <string name="user_error_tunnel_not_running">Туннель не подтвердил запуск. Попробуйте подключиться снова.</string>
+    <string name="user_error_secret_unavailable">Секреты профиля недоступны. Переимпортируйте профиль.</string>
+    <string name="user_error_health_dns">Проверка туннеля не прошла: проблема DNS.</string>
+    <string name="user_error_health_tcp">Проверка туннеля не прошла: нет сетевой связности.</string>
+    <string name="user_error_health_timeout">Проверка туннеля заняла слишком много времени.</string>
+    <string name="user_error_needs_location">Для текущего режима нужен доступ к геоданным (точное местоположение).</string>
+    <string name="user_error_reality_profile">Профиль Reality заполнен не полностью.</string>
+    <string name="user_error_only_vless">Поддерживаются только ссылки vless://</string>
+    <string name="user_error_invalid_uuid">Некорректный UUID в ссылке.</string>
+    <string name="user_error_invalid_host_or_port">Проверьте адрес сервера и порт в ссылке.</string>
+    <string name="ui_error_prefix">Ошибка: %1$s</string>
+    <string name="import_success_prefix">Импортирован: %1$s</string>
+    <string name="save_success">Изменения сохранены.</string>
 </resources>

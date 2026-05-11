@@ -1,15 +1,15 @@
-package com.nothing.mobilevpn.platform
+package com.nothing.mobilecore.platform
 
 import android.content.Context
-import com.nothing.mobilevpn.shared.application.SingBoxConfigCompilerPort
-import com.nothing.mobilevpn.shared.application.VpnSessionController
-import com.nothing.mobilevpn.shared.infrastructure.SingBoxConfigCompiler
+import com.nothing.mobilecore.shared.application.SingBoxConfigCompilerPort
+import com.nothing.mobilecore.shared.application.VpnSessionController
+import com.nothing.mobilecore.shared.infrastructure.SingBoxConfigCompiler
 
 class NothingVpnGraph(context: Context) {
     private val appContext = context.applicationContext
 
-    val profileRepository = ProfileRepositoryAndroid(appContext)
     val secureStore = SecureStoreAndroid(appContext)
+    val profileRepository = ProfileRepositoryAndroid(appContext, secureStore)
     val configCompiler: SingBoxConfigCompilerPort = SingBoxConfigCompiler()
     val singBoxCoreInfo = AndroidSingBoxCoreInfo(appContext)
     val systemVpn = AndroidSystemVpn(appContext)

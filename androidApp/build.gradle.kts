@@ -39,18 +39,43 @@ android {
         targetSdk = providers.gradleProperty("android.targetSdk").get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        val releaseStoreFile = providers.environmentVariable("RELEASE_STORE_FILE").orNull
+        val releaseStorePassword = providers.environmentVariable("RELEASE_STORE_PASSWORD").orNull
+        val releaseKeyAlias = providers.environmentVariable("RELEASE_KEY_ALIAS").orNull
+        val releaseKeyPassword = providers.environmentVariable("RELEASE_KEY_PASSWORD").orNull
+        val hasReleaseSigning =
+            !releaseStoreFile.isNullOrBlank() &&
+                !releaseStorePassword.isNullOrBlank() &&
+                !releaseKeyAlias.isNullOrBlank() &&
+                !releaseKeyPassword.isNullOrBlank()
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isDebuggable = false
             isMinifyEnabled = true
-            // Подпись debug-keystore: APK ставится через adb/APK без отдельного keystore (не для магазина).
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+        }
+        create("localRelease") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
@@ -87,6 +112,11 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    testImplementation(kotlin("test"))
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 
@@ -94,6 +124,6 @@ dependencies {
 tasks.register("nonDebugApk") {
     group = "build"
     description =
-        "Собирает release APK без режима отладки (для установки знакомым; не для магазина). Выход: build/outputs/apk/release/"
-    dependsOn("assembleRelease")
+        "Собирает localRelease APK без режима отладки (локальная установка, debug key). Выход: build/outputs/apk/localRelease/"
+    dependsOn("assembleLocalRelease")
 }

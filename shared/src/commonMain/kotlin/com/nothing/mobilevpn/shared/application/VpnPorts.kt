@@ -1,7 +1,7 @@
-package com.nothing.mobilevpn.shared.application
+package com.nothing.mobilecore.shared.application
 
-import com.nothing.mobilevpn.shared.domain.TunnelPolicy
-import com.nothing.mobilevpn.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,7 +19,7 @@ interface SecureStorePort {
 }
 
 interface SingBoxConfigCompilerPort {
-    fun compile(profile: VlessProfile, policy: TunnelPolicy): String
+    fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String>
 }
 
 /** Persists imported profiles and tunnel policy (no secrets in plain logs). */
@@ -40,5 +40,7 @@ interface ProfileRepositoryPort {
 interface SystemVpnPort {
     suspend fun startVpn(policy: TunnelPolicy, singBoxConfigPath: String): Result<Unit>
     suspend fun stopVpn()
+    suspend fun stopVpnAndAwait(): Result<Unit>
+    suspend fun smokeCheck(policy: TunnelPolicy): Result<Unit>
     fun vpnPermissionNeeded(): Boolean
 }

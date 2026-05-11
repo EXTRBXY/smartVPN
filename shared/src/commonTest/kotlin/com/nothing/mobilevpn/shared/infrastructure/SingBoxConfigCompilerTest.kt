@@ -1,9 +1,10 @@
-package com.nothing.mobilevpn.shared.infrastructure
+package com.nothing.mobilecore.shared.infrastructure
 
-import com.nothing.mobilevpn.shared.domain.DnsMode
-import com.nothing.mobilevpn.shared.domain.TunnelPolicy
-import com.nothing.mobilevpn.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.DnsMode
+import com.nothing.mobilecore.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SingBoxConfigCompilerTest {
@@ -25,10 +26,24 @@ class SingBoxConfigCompilerTest {
 
     @Test
     fun compile_containsCoreKeys() {
-        val json = SingBoxConfigCompiler().compile(profile, policy)
+        val json = SingBoxConfigCompiler().compile(profile, policy).getOrThrow()
         assertTrue(json.contains("\"type\":\"tun\"") || json.contains("\"type\": \"tun\""))
         assertTrue(json.contains("\"type\":\"vless\"") || json.contains("\"type\": \"vless\""))
         assertTrue(json.contains("198.18.0.1/30"))
         assertTrue(json.contains("hijack-dns"))
+    }
+
+    @Test
+    fun compile_failsForRealityWithoutKeys() {
+        val realityProfile = profile.copy(security = "reality", realityPublicKey = null, realityShortId = null)
+        val result = SingBoxConfigCompiler().compile(realityProfile, policy)
+        assertFalse(result.isSuccess)
+    }
+
+    @Test
+    fun compile_failsWhenProfileSecretMissing() {
+        val invalid = profile.copy(uuid = "")
+        val result = SingBoxConfigCompiler().compile(invalid, policy)
+        assertFalse(result.isSuccess)
     }
 }

@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.platform
+package com.nothing.mobilecore.platform
 
 import android.content.Context
 import android.content.SharedPreferences

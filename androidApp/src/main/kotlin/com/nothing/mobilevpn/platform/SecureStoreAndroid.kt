@@ -1,9 +1,9 @@
-package com.nothing.mobilevpn.platform
+package com.nothing.mobilecore.platform
 
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.nothing.mobilevpn.shared.application.SecureStorePort
+import com.nothing.mobilecore.shared.application.SecureStorePort
 
 class SecureStoreAndroid(context: Context) : SecureStorePort {
     private val masterKey = MasterKey.Builder(context.applicationContext)

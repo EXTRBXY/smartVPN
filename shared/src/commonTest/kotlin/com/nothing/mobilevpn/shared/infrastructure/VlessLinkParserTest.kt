@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.shared.infrastructure
+package com.nothing.mobilecore.shared.infrastructure
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

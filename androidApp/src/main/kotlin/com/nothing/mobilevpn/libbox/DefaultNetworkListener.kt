@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.libbox
+package com.nothing.mobilecore.libbox
 
 import android.annotation.TargetApi
 import android.net.ConnectivityManager
@@ -9,17 +9,16 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.runBlocking
 
 /**
  * Отслеживание «текущей» сети для libbox (аналогично по смыслу SFA, без копирования исходников).
  */
-@OptIn(DelicateCoroutinesApi::class, ObsoleteCoroutinesApi::class)
+@OptIn(ObsoleteCoroutinesApi::class)
 object DefaultNetworkListener {
 
     private sealed class NetworkMessage {
@@ -34,8 +33,9 @@ object DefaultNetworkListener {
         class Lost(val network: Network) : NetworkMessage()
     }
 
+    private val actorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val networkActor =
-        GlobalScope.actor<NetworkMessage>(Dispatchers.Unconfined) {
+        actorScope.actor<NetworkMessage>(Dispatchers.Default) {
             val listeners = mutableMapOf<Any, (Network?) -> Unit>()
             var network: Network? = null
             val pending = arrayListOf<NetworkMessage.Get>()
@@ -100,16 +100,16 @@ object DefaultNetworkListener {
     suspend fun stop(key: Any) = networkActor.send(NetworkMessage.Stop(key))
 
     private object Callback : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = runBlocking {
-            networkActor.send(NetworkMessage.Put(network))
+        override fun onAvailable(network: Network) {
+            networkActor.trySend(NetworkMessage.Put(network))
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-            runBlocking { networkActor.send(NetworkMessage.Update(network)) }
+            networkActor.trySend(NetworkMessage.Update(network))
         }
 
-        override fun onLost(network: Network) = runBlocking {
-            networkActor.send(NetworkMessage.Lost(network))
+        override fun onLost(network: Network) {
+            networkActor.trySend(NetworkMessage.Lost(network))
         }
     }
 

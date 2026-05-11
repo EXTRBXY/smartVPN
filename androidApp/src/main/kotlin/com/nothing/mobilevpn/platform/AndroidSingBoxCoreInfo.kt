@@ -1,8 +1,8 @@
-package com.nothing.mobilevpn.platform
+package com.nothing.mobilecore.platform
 
 import android.content.Context
-import com.nothing.mobilevpn.libbox.LibboxAndroidBootstrap
-import com.nothing.mobilevpn.shared.application.SingBoxCoreInfoPort
+import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
+import com.nothing.mobilecore.shared.application.SingBoxCoreInfoPort
 import io.nekohasekai.libbox.Libbox
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

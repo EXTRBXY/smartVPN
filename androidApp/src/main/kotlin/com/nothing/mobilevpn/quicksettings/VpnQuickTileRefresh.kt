@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.quicksettings
+package com.nothing.mobilecore.quicksettings
 
 import android.content.ComponentName
 import android.content.Context

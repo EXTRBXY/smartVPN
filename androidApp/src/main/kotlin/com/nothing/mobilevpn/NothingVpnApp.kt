@@ -1,12 +1,12 @@
-package com.nothing.mobilevpn
+package com.nothing.mobilecore
 
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
-import com.nothing.mobilevpn.libbox.LibboxAndroidBootstrap
-import com.nothing.mobilevpn.platform.NothingVpnGraph
-import com.nothing.mobilevpn.platform.ProfileStorageMigration
+import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
+import com.nothing.mobilecore.platform.NothingVpnGraph
+import com.nothing.mobilecore.platform.ProfileStorageMigration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

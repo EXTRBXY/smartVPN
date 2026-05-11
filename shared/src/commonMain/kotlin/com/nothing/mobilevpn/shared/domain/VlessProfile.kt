@@ -1,4 +1,4 @@
-package com.nothing.mobilevpn.shared.domain
+package com.nothing.mobilecore.shared.domain
 
 import kotlinx.serialization.Serializable
 

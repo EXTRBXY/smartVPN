@@ -1,8 +1,8 @@
-package com.nothing.mobilevpn.platform
+package com.nothing.mobilecore.platform
 
 import android.util.Log
-import com.nothing.mobilevpn.BuildConfig
-import com.nothing.mobilevpn.shared.infrastructure.LogRedaction
+import com.nothing.mobilecore.BuildConfig
+import com.nothing.mobilecore.shared.infrastructure.LogRedaction
 
 internal object SafeAndroidLog {
     fun e(tag: String, prefix: String, t: Throwable?) {

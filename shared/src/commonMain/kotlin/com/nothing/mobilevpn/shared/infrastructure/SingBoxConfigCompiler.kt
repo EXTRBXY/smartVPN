@@ -1,9 +1,9 @@
-package com.nothing.mobilevpn.shared.infrastructure
+package com.nothing.mobilecore.shared.infrastructure
 
-import com.nothing.mobilevpn.shared.application.SingBoxConfigCompilerPort
-import com.nothing.mobilevpn.shared.domain.DnsMode
-import com.nothing.mobilevpn.shared.domain.VlessProfile
-import com.nothing.mobilevpn.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.application.SingBoxConfigCompilerPort
+import com.nothing.mobilecore.shared.domain.DnsMode
+import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -17,7 +17,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
     /** Без prettyPrint — меньше утечки структуры при дампе файла. */
     private val format = Json { prettyPrint = false }
 
-    override fun compile(profile: VlessProfile, policy: TunnelPolicy): String {
+    override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = runCatching {
         val json = buildJsonObject {
             put("log", buildJsonObject { put("level", JsonPrimitive(policy.singBoxLogLevel)) })
             buildDns(policy)?.let { put("dns", it) }
@@ -25,7 +25,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
             put("outbounds", buildOutbounds(profile))
             put("route", buildRoute(policy))
         }
-        return format.encodeToString(JsonElement.serializer(), json)
+        format.encodeToString(JsonElement.serializer(), json)
     }
 
     private fun buildTunInbound(profile: VlessProfile, policy: TunnelPolicy): JsonObject =
@@ -54,6 +54,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
     }
 
     private fun buildVlessOutbound(profile: VlessProfile): JsonObject = buildJsonObject {
+        require(profile.uuid.isNotBlank()) { "profile_secret_unavailable" }
         put("type", JsonPrimitive("vless"))
         put("tag", JsonPrimitive("proxy"))
         put("server", JsonPrimitive(profile.host))
@@ -80,10 +81,14 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
                 })
             }
             if (profile.security == "reality") {
+                val publicKey = profile.realityPublicKey?.takeIf { it.isNotBlank() }
+                    ?: error("reality_public_key_missing")
+                val shortId = profile.realityShortId?.takeIf { it.isNotBlank() }
+                    ?: error("reality_short_id_missing")
                 put("reality", buildJsonObject {
                     put("enabled", JsonPrimitive(true))
-                    put("public_key", JsonPrimitive(profile.realityPublicKey!!))
-                    put("short_id", JsonPrimitive(profile.realityShortId!!))
+                    put("public_key", JsonPrimitive(publicKey))
+                    put("short_id", JsonPrimitive(shortId))
                 })
             }
         }

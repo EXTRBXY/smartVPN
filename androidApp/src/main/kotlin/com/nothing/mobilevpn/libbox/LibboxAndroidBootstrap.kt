@@ -1,10 +1,10 @@
-package com.nothing.mobilevpn.libbox
+package com.nothing.mobilecore.libbox
 
 import android.app.Application
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
-import com.nothing.mobilevpn.BuildConfig
+import com.nothing.mobilecore.BuildConfig
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.SetupOptions
 import java.util.Locale
@@ -35,7 +35,7 @@ object LibboxAndroidBootstrap {
     fun ensureSetup() {
         if (!setupDone.compareAndSet(false, true)) return
         val baseDir = application.filesDir.apply { mkdirs() }
-        val workingDir = (application.getExternalFilesDir(null) ?: application.filesDir).apply { mkdirs() }
+        val workingDir = java.io.File(application.filesDir, "runtime").apply { mkdirs() }
         val tempDir = application.cacheDir.apply { mkdirs() }
         runCatching {
             Libbox.setup(
