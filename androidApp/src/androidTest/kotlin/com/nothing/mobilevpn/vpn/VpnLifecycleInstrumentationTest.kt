@@ -3,6 +3,9 @@ package com.nothing.mobilecore.vpn
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nothing.mobilecore.platform.AndroidSystemVpn
+import com.nothing.mobilecore.platform.ProfileRepositoryAndroid
+import com.nothing.mobilecore.platform.SecureStoreAndroid
+import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,5 +47,27 @@ class VpnLifecycleInstrumentationTest {
         val result = AndroidSystemVpn(context).stopVpnAndAwait()
 
         assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun updatingProfile_replacesStoredSecret() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val repository = ProfileRepositoryAndroid(context, SecureStoreAndroid(context))
+        val id = "instrumentation-secret-update"
+        val original = VlessProfile(
+            id = id,
+            name = "test",
+            uuid = "12345678-1234-4123-8123-123456789abc",
+            host = "example.com",
+            port = 443,
+        )
+        val replacement = "87654321-4321-4123-8123-cba987654321"
+        try {
+            repository.upsert(original)
+            repository.upsert(original.copy(uuid = replacement))
+            assertEquals(replacement, repository.listProfiles().single { it.id == id }.uuid)
+        } finally {
+            repository.delete(id)
+        }
     }
 }

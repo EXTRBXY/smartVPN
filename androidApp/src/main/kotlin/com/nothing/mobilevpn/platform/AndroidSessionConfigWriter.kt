@@ -15,7 +15,7 @@ class AndroidSessionConfigWriter(
     init {
         SessionConfigFileLifecycle.cleanupStartupStaleOnly(
             dir = dir,
-            maxAgeMs = TimeUnit.HOURS.toMillis(6),
+            maxAgeMs = SESSION_CONFIG_MAX_AGE_MS,
         )
     }
 
@@ -25,7 +25,7 @@ class AndroidSessionConfigWriter(
             dir = dir,
             keepPath = null,
             maxRetainedFiles = 2,
-            maxAgeMs = TimeUnit.HOURS.toMillis(6),
+            maxAgeMs = SESSION_CONFIG_MAX_AGE_MS,
         )
         val target = File(dir, "sing-box-session-${System.currentTimeMillis()}.json")
         val tmp = File(dir, "${target.name}.tmp")
@@ -47,11 +47,12 @@ class AndroidSessionConfigWriter(
     }
 
     companion object {
+        private val SESSION_CONFIG_MAX_AGE_MS = TimeUnit.MINUTES.toMillis(5)
         fun cleanupStartupStaleOnly(context: Context) {
             val dir = context.applicationContext.noBackupFilesDir.also { it.mkdirs() }
             SessionConfigFileLifecycle.cleanupStartupStaleOnly(
                 dir = dir,
-                maxAgeMs = TimeUnit.HOURS.toMillis(6),
+                maxAgeMs = SESSION_CONFIG_MAX_AGE_MS,
             )
         }
 
@@ -61,7 +62,7 @@ class AndroidSessionConfigWriter(
                 dir = dir,
                 keepPath = keepPath,
                 maxRetainedFiles = 2,
-                maxAgeMs = TimeUnit.HOURS.toMillis(6),
+                maxAgeMs = SESSION_CONFIG_MAX_AGE_MS,
             )
         }
 
@@ -71,7 +72,7 @@ class AndroidSessionConfigWriter(
                 dir = dir,
                 keepPath = keepPath,
                 maxRetainedFiles = 2,
-                maxAgeMs = TimeUnit.HOURS.toMillis(6),
+                maxAgeMs = SESSION_CONFIG_MAX_AGE_MS,
             )
         }
     }

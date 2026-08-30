@@ -15,6 +15,8 @@ object UserErrorText {
                 context.getString(R.string.user_error_policy_network_params)
             "invalid_doh_server", "invalid_doh_path" ->
                 context.getString(R.string.user_error_doh_params)
+            "invalid_doh_sni_for_ip" ->
+                context.getString(R.string.user_error_doh_sni_for_ip)
             "vpn_connect_timeout" ->
                 context.getString(R.string.user_error_timeout)
             "vpn_not_running_after_connect" ->
@@ -25,6 +27,8 @@ object UserErrorText {
                 context.getString(R.string.user_error_health_dns)
             "smoke_tcp_failed" ->
                 context.getString(R.string.user_error_health_tcp)
+            "smoke_proxy_failed" ->
+                context.getString(R.string.user_error_health_proxy)
             "smoke_timeout" ->
                 context.getString(R.string.user_error_health_timeout)
             "wifi_state_needs_fine_location" ->
@@ -37,6 +41,20 @@ object UserErrorText {
                 context.getString(R.string.user_error_invalid_uuid)
             "Missing host.", "Invalid port." ->
                 context.getString(R.string.user_error_invalid_host_or_port)
+            "profile_delete_requires_disconnect" ->
+                context.getString(R.string.user_error_profile_delete_requires_disconnect)
+            "profile_name_required" ->
+                context.getString(R.string.user_error_profile_name_required)
+            "profile_host_required" ->
+                context.getString(R.string.user_error_profile_host_required)
+            "profile_port_invalid" ->
+                context.getString(R.string.user_error_profile_port_invalid)
+            "profile_uuid_invalid" ->
+                context.getString(R.string.user_error_profile_uuid_invalid)
+            "profile_reality_incomplete" ->
+                context.getString(R.string.user_error_profile_reality_incomplete)
+            "profile_id_immutable" ->
+                context.getString(R.string.user_error_profile_id_immutable)
             else ->
                 context.getString(R.string.user_error_generic)
         }

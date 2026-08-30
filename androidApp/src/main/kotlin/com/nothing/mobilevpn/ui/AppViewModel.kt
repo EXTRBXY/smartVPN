@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nothing.mobilecore.platform.NothingVpnGraph
+import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.validate
@@ -49,6 +50,8 @@ class AppViewModel(
 
     private val _splitTunnelSaving = MutableStateFlow(false)
     val splitTunnelSaving: StateFlow<Boolean> = _splitTunnelSaving
+    private val _dnsSaving = MutableStateFlow(false)
+    val dnsSaving: StateFlow<Boolean> = _dnsSaving
 
     init {
         viewModelScope.launch {
@@ -118,8 +121,66 @@ class AppViewModel(
         viewModelScope.launch { graph.sessionController.disconnectSuspend() }
     }
 
+    fun updateProfile(profileId: String, draft: VlessProfile, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = graph.sessionController.updateProfileSuspend(profileId, draft)
+            if (result.isSuccess) {
+                _activeProfileId.value = profiles.getActiveProfileId()
+            }
+            onResult(result)
+        }
+    }
+
+    fun deleteProfile(profileId: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = graph.sessionController.deleteProfileSuspend(profileId)
+            if (result.isSuccess) {
+                _activeProfileId.value = profiles.getActiveProfileId()
+            }
+            onResult(result)
+        }
+    }
+
     suspend fun singBoxVersion(): String =
         controller.singBoxCoreVersion().getOrElse { throw it }
+
+    fun saveDnsSystem(onResult: (Result<Unit>) -> Unit) {
+        saveDnsPolicy(onResult) { cur ->
+            cur.copy(
+                dnsMode = DnsMode.SYSTEM,
+                dohSni = null,
+            )
+        }
+    }
+
+    fun saveDnsCustom(host: String, path: String, sni: String?, onResult: (Result<Unit>) -> Unit) {
+        saveDnsPolicy(onResult) { cur ->
+            cur.copy(
+                dnsMode = DnsMode.DOH,
+                dohServer = host.trim(),
+                dohPath = path.trim(),
+                dohSni = sni?.trim()?.takeIf { it.isNotBlank() },
+            )
+        }
+    }
+
+    private fun saveDnsPolicy(
+        onResult: (Result<Unit>) -> Unit,
+        transform: (TunnelPolicy) -> TunnelPolicy,
+    ) {
+        if (_dnsSaving.value) return
+        viewModelScope.launch {
+            _dnsSaving.update { true }
+            val result = runCatching {
+                val cur = profiles.getTunnelPolicy()
+                val updated = transform(cur)
+                updated.validate().getOrElse { throw it }
+                profiles.setTunnelPolicy(updated)
+            }
+            onResult(result)
+            _dnsSaving.update { false }
+        }
+    }
 
     class Factory(
         private val graph: NothingVpnGraph,

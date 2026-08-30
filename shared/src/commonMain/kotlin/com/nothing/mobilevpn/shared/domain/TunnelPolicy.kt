@@ -32,27 +32,35 @@ data class TunnelPolicy(
     val dnsMode: DnsMode = DnsMode.SYSTEM,
     val dohServer: String = "1.1.1.1",
     val dohPath: String = "/dns-query",
-    val dohSni: String? = null,
-    /** If true, session failures must fail closed (no automatic reconnect attempts). */
+    val dohSni: String? = "cloudflare-dns.com",
+    /**
+     * If true, a failed connection attempt is stopped immediately instead of being retried.
+     * This is a retry policy, not an Android kill switch or lockdown-VPN setting.
+     */
     val failClosed: Boolean = true,
     val singBoxLogLevel: String = "info",
     val tunStack: String = "mixed",
 )
 
-private val cidrRegex = Regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$")
 private val dohHostRegex = Regex("^[a-zA-Z0-9.-]+$")
 private val acceptedLogLevels = setOf("trace", "debug", "info", "warn", "error")
 private val acceptedTunStacks = setOf("mixed", "system", "gvisor")
 
 fun TunnelPolicy.validate(): Result<Unit> = runCatching {
     require(mtu in 1280..9000) { "invalid_mtu" }
-    require(cidrRegex.matches(tunIpv4Cidr.trim())) { "invalid_tun_ipv4_cidr" }
+    require(isValidIpv4Cidr(tunIpv4Cidr)) { "invalid_tun_ipv4_cidr" }
     if (routingMode == RoutingMode.PER_APP_ALLOWED) {
         require(allowedPackageNames.isNotEmpty()) { "per_app_requires_packages" }
     }
     if (dnsMode == DnsMode.DOH) {
-        require(dohHostRegex.matches(dohServer.trim())) { "invalid_doh_server" }
+        val host = dohServer.trim()
+        require(dohHostRegex.matches(host)) { "invalid_doh_server" }
+        require(!host.all { it.isDigit() || it == '.' } || isValidIpv4(host)) { "invalid_doh_server" }
         require(dohPath.startsWith("/")) { "invalid_doh_path" }
+        val sni = dohSni?.trim().orEmpty()
+        if (isIpHost(host) && sni.isBlank()) {
+            error("invalid_doh_sni_for_ip")
+        }
     }
     val logLevel = singBoxLogLevel.trim().lowercase()
     require(logLevel in acceptedLogLevels) { "invalid_singbox_log_level" }

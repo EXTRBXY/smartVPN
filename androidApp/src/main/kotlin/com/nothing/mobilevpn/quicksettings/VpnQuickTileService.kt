@@ -1,6 +1,8 @@
 package com.nothing.mobilecore.quicksettings
 
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -10,6 +12,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import com.nothing.mobilecore.NothingVpnApp
 import com.nothing.mobilecore.MainActivity
 import com.nothing.mobilecore.R
@@ -55,23 +58,14 @@ class VpnQuickTileService : TileService() {
         super.onStartListening()
         VpnRunningState.syncFromDisk(this)
         val filter = IntentFilter(VpnRunningStateContract.ACTION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(
-                stateReceiver,
-                filter,
-                VpnInternalBroadcastSecurity.PERMISSION,
-                null,
-                Context.RECEIVER_NOT_EXPORTED,
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            registerReceiver(
-                stateReceiver,
-                filter,
-                VpnInternalBroadcastSecurity.PERMISSION,
-                null,
-            )
-        }
+        ContextCompat.registerReceiver(
+            this,
+            stateReceiver,
+            filter,
+            VpnInternalBroadcastSecurity.PERMISSION,
+            null,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         scope.launch(Dispatchers.Default) {
             val hasProfile = graph.profileRepository.getActiveProfileId() != null
             withContext(Dispatchers.Main) {
@@ -98,6 +92,7 @@ class VpnQuickTileService : TileService() {
         unlockAndRun { handleClick() }
     }
 
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun handleClick() {
         if (VpnRunningState.isRunning) {
             scope.launch(Dispatchers.Default) {
@@ -107,11 +102,21 @@ class VpnQuickTileService : TileService() {
         }
         if (VpnService.prepare(this) != null) {
             Toast.makeText(this, R.string.qs_tile_need_vpn_permission, Toast.LENGTH_LONG).show()
-            startActivityAndCollapse(
-                Intent(this, MainActivity::class.java).addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
-                ),
+            val activityIntent = Intent(this, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
             )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val pendingIntent = PendingIntent.getActivity(
+                    this,
+                    2,
+                    activityIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                startActivityAndCollapse(pendingIntent)
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityAndCollapse(activityIntent)
+            }
             return
         }
         scope.launch(Dispatchers.Default) {

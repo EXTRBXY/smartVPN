@@ -74,7 +74,9 @@ class ProfileRepositoryAndroid(
                 listSerializer,
                 prefs.getString(ProfileStorageMigration.KEY_PROFILES, null) ?: "[]",
             ).toMutableList()
-        val profileWithSecrets = restoreSecrets(profile)
+        // The caller is authoritative on upsert. Restoring first would replace an edited
+        // UUID/Reality key with the previously stored secret and make the edit a no-op.
+        val profileWithSecrets = profile
         saveSecrets(profileWithSecrets)
         val idx = current.indexOfFirst { it.id == profile.id }
         if (idx >= 0) current[idx] = stripSecrets(profileWithSecrets) else current.add(stripSecrets(profileWithSecrets))

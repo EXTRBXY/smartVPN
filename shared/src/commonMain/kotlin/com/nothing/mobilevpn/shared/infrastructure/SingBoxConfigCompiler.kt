@@ -2,6 +2,7 @@ package com.nothing.mobilecore.shared.infrastructure
 
 import com.nothing.mobilecore.shared.application.SingBoxConfigCompilerPort
 import com.nothing.mobilecore.shared.domain.DnsMode
+import com.nothing.mobilecore.shared.domain.isIpHost
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import kotlinx.serialization.json.Json
@@ -23,7 +24,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
             buildDns(policy)?.let { put("dns", it) }
             put("inbounds", buildJsonArray { add(buildTunInbound(profile, policy)) })
             put("outbounds", buildOutbounds(profile))
-            put("route", buildRoute(policy))
+            put("route", buildRoute())
         }
         format.encodeToString(JsonElement.serializer(), json)
     }
@@ -44,6 +45,13 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
     private fun buildOutbounds(profile: VlessProfile): JsonArray = buildJsonArray {
         add(buildVlessOutbound(profile))
         add(buildJsonObject {
+            // Expose the proxy as a group so libbox can URL-test the real outbound dialer.
+            put("type", JsonPrimitive("selector"))
+            put("tag", JsonPrimitive("proxy"))
+            put("outbounds", buildJsonArray { add(JsonPrimitive("proxy-node")) })
+            put("default", JsonPrimitive("proxy-node"))
+        })
+        add(buildJsonObject {
             put("type", JsonPrimitive("direct"))
             put("tag", JsonPrimitive("direct"))
         })
@@ -56,7 +64,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
     private fun buildVlessOutbound(profile: VlessProfile): JsonObject = buildJsonObject {
         require(profile.uuid.isNotBlank()) { "profile_secret_unavailable" }
         put("type", JsonPrimitive("vless"))
-        put("tag", JsonPrimitive("proxy"))
+        put("tag", JsonPrimitive("proxy-node"))
         put("server", JsonPrimitive(profile.host))
         put("server_port", JsonPrimitive(profile.port))
         put("uuid", JsonPrimitive(profile.uuid))
@@ -117,10 +125,12 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
                 put("final", JsonPrimitive("doh"))
                 put("reverse_mapping", JsonPrimitive(true))
                 put("servers", buildJsonArray {
+                    add(buildLocalDnsServer())
                     add(buildJsonObject {
                         put("type", JsonPrimitive("https"))
                         put("tag", JsonPrimitive("doh"))
-                        put("server", JsonPrimitive(policy.dohServer))
+                        val dohHost = policy.dohServer.trim()
+                        put("server", JsonPrimitive(dohHost))
                         put("server_port", JsonPrimitive(443))
                         put("path", JsonPrimitive(policy.dohPath))
                         policy.dohSni?.let { sni ->
@@ -129,29 +139,26 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
                                 put("server_name", JsonPrimitive(sni))
                             })
                         }
-                        put("detour", JsonPrimitive("proxy"))
+                        if (!isIpHost(dohHost)) {
+                            put("domain_resolver", JsonPrimitive("local"))
+                        }
                     })
                 })
             }
             DnsMode.SYSTEM -> buildJsonObject {
                 put("final", JsonPrimitive("local"))
                 put("reverse_mapping", JsonPrimitive(true))
-                put(
-                    "servers",
-                    buildJsonArray {
-                        add(
-                            buildJsonObject {
-                                put("type", JsonPrimitive("local"))
-                                put("tag", JsonPrimitive("local"))
-                                put("prefer_go", JsonPrimitive(false))
-                            },
-                        )
-                    },
-                )
+                put("servers", buildJsonArray { add(buildLocalDnsServer()) })
             }
         }
 
-    private fun buildRoute(policy: TunnelPolicy): JsonObject {
+    private fun buildLocalDnsServer(): JsonObject = buildJsonObject {
+        put("type", JsonPrimitive("local"))
+        put("tag", JsonPrimitive("local"))
+        put("prefer_go", JsonPrimitive(false))
+    }
+
+    private fun buildRoute(): JsonObject {
         val rules = buildJsonArray {
             add(
                 buildJsonObject {
@@ -160,11 +167,9 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
                 },
             )
         }
-        val useDoh = policy.dnsMode == DnsMode.DOH
         return buildJsonObject {
             put("final", JsonPrimitive("proxy"))
             put("auto_detect_interface", JsonPrimitive(true))
-            if (useDoh) put("default_domain_resolver", JsonPrimitive("doh"))
             put("rules", rules)
         }
     }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class VpnSessionControllerRecoveryTest {
@@ -158,20 +159,114 @@ class VpnSessionControllerRecoveryTest {
         assertEquals(VpnSessionState.Disconnected, ctrl.state.value)
     }
 
+    @Test
+    fun deleteProfileSuspend_blocksDeletingActiveWhileConnected() = runBlocking {
+        val profile = VlessProfile(
+            id = "p1",
+            name = "test",
+            uuid = "12345678-1234-4123-8123-123456789abc",
+            host = "example.com",
+            port = 443,
+        )
+        val repo = FakeProfileRepository(profile)
+        val compiler = object : SingBoxConfigCompilerPort {
+            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
+        }
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val writer = SessionConfigWriter { "/tmp/session.json" }
+        val ctrl = VpnSessionController(repo, compiler, SingBoxCoreInfoPort { "1.0.0" }, systemVpn, writer)
+        ctrl.connectSuspend()
+
+        val result = ctrl.deleteProfileSuspend("p1")
+
+        assertTrue(result.isFailure)
+        assertEquals("profile_delete_requires_disconnect", result.exceptionOrNull()?.message)
+        assertEquals(1, repo.listProfiles().size)
+    }
+
+    @Test
+    fun deleteProfileSuspend_clearsActiveIdWhenDisconnected() = runBlocking {
+        val profile = VlessProfile(
+            id = "p1",
+            name = "test",
+            uuid = "12345678-1234-4123-8123-123456789abc",
+            host = "example.com",
+            port = 443,
+        )
+        val repo = FakeProfileRepository(profile)
+        val compiler = object : SingBoxConfigCompilerPort {
+            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
+        }
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val writer = SessionConfigWriter { "/tmp/session.json" }
+        val ctrl = VpnSessionController(repo, compiler, SingBoxCoreInfoPort { "1.0.0" }, systemVpn, writer)
+
+        val result = ctrl.deleteProfileSuspend("p1")
+
+        assertTrue(result.isSuccess)
+        assertTrue(repo.listProfiles().isEmpty())
+        assertNull(repo.getActiveProfileId())
+    }
+
+    @Test
+    fun updateProfileSuspend_updatesFieldsWithoutChangingId() = runBlocking {
+        val profile = VlessProfile(
+            id = "p1",
+            name = "test",
+            uuid = "12345678-1234-4123-8123-123456789abc",
+            host = "example.com",
+            port = 443,
+        )
+        val repo = FakeProfileRepository(profile)
+        val compiler = object : SingBoxConfigCompilerPort {
+            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
+        }
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val writer = SessionConfigWriter { "/tmp/session.json" }
+        val ctrl = VpnSessionController(repo, compiler, SingBoxCoreInfoPort { "1.0.0" }, systemVpn, writer)
+
+        val result = ctrl.updateProfileSuspend(
+            profileId = "p1",
+            draft = profile.copy(name = "updated", host = "new.example.com", port = 8443),
+        )
+
+        assertTrue(result.isSuccess)
+        val updated = repo.listProfiles().single()
+        assertEquals("p1", updated.id)
+        assertEquals("updated", updated.name)
+        assertEquals("new.example.com", updated.host)
+        assertEquals(8443, updated.port)
+    }
+
     private class FakeProfileRepository(
         private val profile: VlessProfile,
         initialPolicy: TunnelPolicy = TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = false),
     ) : ProfileRepositoryPort {
         private val profilesFlow = MutableStateFlow(listOf(profile))
         private var policy = initialPolicy
+        private var activeProfileId: String? = profile.id
         override fun observeProfiles(): Flow<List<VlessProfile>> = profilesFlow
         override suspend fun listProfiles(): List<VlessProfile> = profilesFlow.value
         override suspend fun upsert(profile: VlessProfile) {
-            profilesFlow.value = listOf(profile)
+            val current = profilesFlow.value.toMutableList()
+            val idx = current.indexOfFirst { it.id == profile.id }
+            if (idx >= 0) {
+                current[idx] = profile
+            } else {
+                current.add(profile)
+            }
+            profilesFlow.value = current
         }
-        override suspend fun delete(profileId: String) {}
-        override suspend fun getActiveProfileId(): String? = profile.id
-        override suspend fun setActiveProfileId(id: String?) {}
+        override suspend fun delete(profileId: String) {
+            profilesFlow.value = profilesFlow.value.filterNot { it.id == profileId }
+            if (activeProfileId == profileId) {
+                activeProfileId = null
+            }
+        }
+        override suspend fun getActiveProfileId(): String? = activeProfileId
+        override suspend fun setActiveProfileId(id: String?) {
+            activeProfileId = id
+        }
         override suspend fun getTunnelPolicy(): TunnelPolicy = policy
         override suspend fun setTunnelPolicy(policy: TunnelPolicy) {
             this.policy = policy

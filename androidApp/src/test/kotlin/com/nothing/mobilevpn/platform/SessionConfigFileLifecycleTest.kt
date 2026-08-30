@@ -2,7 +2,7 @@ package com.nothing.mobilecore.platform
 
 import java.io.File
 import java.nio.file.Files
-import kotlin.test.Test
+import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 

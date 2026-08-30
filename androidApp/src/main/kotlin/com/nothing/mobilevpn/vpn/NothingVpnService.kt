@@ -293,8 +293,13 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         LibboxAndroidBootstrap.ensureSetup()
         sessionConfigPath = configPath
         lastPolicy = policy
-        val content = File(configPath).readText()
+        val configFile = File(configPath)
+        val content = configFile.readText()
         if (content.isBlank()) error("empty_config")
+        // libbox consumes the JSON string, so the secret-bearing file is no longer needed.
+        // Delete it before starting the core; crash recovery therefore does not retain credentials.
+        runCatching { configFile.delete() }
+        sessionConfigPath = null
 
         commandServer = CommandServer(handler, this)
         commandServer.start()

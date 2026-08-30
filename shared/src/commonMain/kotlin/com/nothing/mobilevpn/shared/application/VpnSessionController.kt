@@ -27,6 +27,8 @@ class VpnSessionController(
     private val systemVpn: SystemVpnPort,
     private val configWriter: SessionConfigWriter,
 ) {
+    private val uuidRegex =
+        Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var connectJob: Job? = null
     private val connectMutex = Mutex()
@@ -126,6 +128,40 @@ class VpnSessionController(
         runCatching { singBoxCoreInfo.version() }
     }
 
+    suspend fun updateProfileSuspend(profileId: String, draft: VlessProfile): Result<Unit> = withContext(Dispatchers.Default) {
+        runCatching {
+            if (draft.id != profileId) error("profile_id_immutable")
+            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: error("profile_not_found")
+            val normalized = normalizeProfileForSave(draft.copy(id = existing.id))
+            validateProfileForSave(normalized).getOrElse { throw it }
+            profileRepository.upsert(normalized)
+        }.onFailure { e ->
+            _lastError.value = LogRedaction.redactUserMessage(e.message ?: "profile_update_failed")
+        }
+    }
+
+    suspend fun deleteProfileSuspend(profileId: String): Result<Unit> = withContext(Dispatchers.Default) {
+        runCatching {
+            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: error("profile_not_found")
+            val activeId = profileRepository.getActiveProfileId()
+            val isDeletingActive = activeId == existing.id
+            val stateNow = _state.value
+            val vpnIsActive = stateNow is VpnSessionState.Connected ||
+                stateNow is VpnSessionState.Connecting ||
+                stateNow is VpnSessionState.Recovering ||
+                stateNow is VpnSessionState.Disconnecting
+            if (isDeletingActive && vpnIsActive) {
+                error("profile_delete_requires_disconnect")
+            }
+            profileRepository.delete(existing.id)
+            if (isDeletingActive) {
+                profileRepository.setActiveProfileId(null)
+            }
+        }.onFailure { e ->
+            _lastError.value = LogRedaction.redactUserMessage(e.message ?: "profile_delete_failed")
+        }
+    }
+
     /**
      * Туннель поднят или остановлен вне этого контроллера (плитка Quick Settings и т.п.).
      * Не вызывает [SystemVpnPort], только выравнивает [state] с реальностью.
@@ -142,6 +178,33 @@ class VpnSessionController(
                 _lastError.value = LogRedaction.redactUserMessage("vpn_not_running_after_connect")
             }
             _state.value = VpnSessionState.Disconnected
+        }
+    }
+
+    private fun normalizeProfileForSave(profile: VlessProfile): VlessProfile {
+        val security = profile.security.trim().lowercase()
+        val normalizedRealityPublicKey = profile.realityPublicKey?.trim().takeUnless { it.isNullOrEmpty() }
+        val normalizedRealityShortId = profile.realityShortId?.trim().takeUnless { it.isNullOrEmpty() }
+        val dropReality = security != "reality"
+        return profile.copy(
+            name = profile.name.trim(),
+            uuid = profile.uuid.trim(),
+            host = profile.host.trim(),
+            security = security,
+            realityPublicKey = if (dropReality) null else normalizedRealityPublicKey,
+            realityShortId = if (dropReality) null else normalizedRealityShortId,
+        )
+    }
+
+    private fun validateProfileForSave(profile: VlessProfile): Result<Unit> = runCatching {
+        if (profile.name.isBlank()) error("profile_name_required")
+        if (profile.host.isBlank()) error("profile_host_required")
+        if (profile.port !in 1..65535) error("profile_port_invalid")
+        if (!uuidRegex.matches(profile.uuid)) error("profile_uuid_invalid")
+        if (profile.security == "reality") {
+            if (profile.realityPublicKey.isNullOrBlank() || profile.realityShortId.isNullOrBlank()) {
+                error("profile_reality_incomplete")
+            }
         }
     }
 }

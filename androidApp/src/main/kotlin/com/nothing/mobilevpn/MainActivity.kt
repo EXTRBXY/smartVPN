@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.util.LruCache
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -71,15 +72,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import com.nothing.mobilecore.BuildConfig
+import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.VpnSessionState
 import com.nothing.mobilecore.ui.AppViewModel
@@ -101,6 +106,18 @@ private val appIconBitmapCache: LruCache<String, Bitmap> =
     }
 
 private fun appIconCacheKey(packageName: String, sizePx: Int): String = "$packageName#$sizePx"
+
+private data class DnsPreset(
+    val name: String,
+    val host: String,
+    val path: String,
+    val sni: String?,
+)
+
+private val dnsPresets = listOf(
+    DnsPreset("Cloudflare", "1.1.1.1", "/dns-query", "cloudflare-dns.com"),
+    DnsPreset("Google", "8.8.8.8", "/dns-query", "dns.google"),
+)
 
 class MainActivity : ComponentActivity() {
 
@@ -145,6 +162,8 @@ class MainActivity : ComponentActivity() {
                             vm = vm,
                             onImport = { nav.navigate("import") },
                             onApps = { nav.navigate("apps") },
+                            onDns = { nav.navigate("dns") },
+                            onEditProfile = { profileId -> nav.navigate("profile/edit/$profileId") },
                             onPrepareVpnAndConnect = { connect ->
                                 val intent = VpnService.prepare(this@MainActivity)
                                 if (intent != null) {
@@ -162,6 +181,20 @@ class MainActivity : ComponentActivity() {
                     composable("apps") {
                         AppsRoute(vm = vm, onBack = { nav.popBackStack() })
                     }
+                    composable("dns") {
+                        DnsRoute(vm = vm, onBack = { nav.popBackStack() })
+                    }
+                    composable(
+                        route = "profile/edit/{profileId}",
+                        arguments = listOf(navArgument("profileId") { type = NavType.StringType }),
+                    ) { backStackEntry ->
+                        val profileId = backStackEntry.arguments?.getString("profileId").orEmpty()
+                        ProfileEditRoute(
+                            vm = vm,
+                            profileId = profileId,
+                            onBack = { nav.popBackStack() },
+                        )
+                    }
                 }
             }
         }
@@ -170,23 +203,14 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         val filter = IntentFilter(VpnRunningStateContract.ACTION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(
-                vpnRunningReceiver,
-                filter,
-                VpnInternalBroadcastSecurity.PERMISSION,
-                null,
-                Context.RECEIVER_NOT_EXPORTED,
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            registerReceiver(
-                vpnRunningReceiver,
-                filter,
-                VpnInternalBroadcastSecurity.PERMISSION,
-                null,
-            )
-        }
+        ContextCompat.registerReceiver(
+            this,
+            vpnRunningReceiver,
+            filter,
+            VpnInternalBroadcastSecurity.PERMISSION,
+            null,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         VpnRunningState.syncFromDisk(this)
         (application as NothingVpnApp).graph.sessionController.applyExternalTunnelRunning(
             VpnRunningState.isRunning,
@@ -205,6 +229,8 @@ private fun HomeRoute(
     vm: AppViewModel,
     onImport: () -> Unit,
     onApps: () -> Unit,
+    onDns: () -> Unit,
+    onEditProfile: (String) -> Unit,
     onPrepareVpnAndConnect: (connect: () -> Unit) -> Unit,
 ) {
     val context = LocalContext.current
@@ -287,7 +313,14 @@ private fun HomeRoute(
                         null
                     },
                 ) {
-                    Text("${p.name} — ${p.host}:${p.port}", modifier = Modifier.padding(12.dp))
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("${p.name} — ${p.host}:${p.port}")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { onEditProfile(p.id) }) {
+                                Text("Редактировать")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -312,6 +345,9 @@ private fun HomeRoute(
             Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
                 Text("Импорт vless://")
             }
+            Button(onClick = onDns, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.home_dns_button))
+            }
 
             if (policyMode == RoutingMode.PER_APP_ALLOWED || policyMode == RoutingMode.PER_APP_EXCLUDED) {
                 Button(onClick = onApps, modifier = Modifier.fillMaxWidth()) {
@@ -319,6 +355,338 @@ private fun HomeRoute(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val dnsSaving by vm.dnsSaving.collectAsState()
+    var dnsMode by rememberSaveable { mutableStateOf(DnsMode.SYSTEM) }
+    var customHost by rememberSaveable { mutableStateOf("") }
+    var customPath by rememberSaveable { mutableStateOf("/dns-query") }
+    var customSni by rememberSaveable { mutableStateOf("") }
+    var selectedPresetName by rememberSaveable { mutableStateOf<String?>(null) }
+    var status by rememberSaveable { mutableStateOf<String?>(null) }
+    var statusError by rememberSaveable { mutableStateOf(false) }
+    val presets = remember { dnsPresets }
+
+    LaunchedEffect(Unit) {
+        val policy = vm.getTunnelPolicy()
+        dnsMode = policy.dnsMode
+        customHost = policy.dohServer
+        customPath = policy.dohPath
+        customSni = policy.dohSni.orEmpty()
+        selectedPresetName = presets.firstOrNull { it.host == customHost && it.path == customPath }?.name
+    }
+
+    fun applyDnsResult(result: Result<Unit>) {
+        statusError = result.isFailure
+        status = if (result.isSuccess) {
+            context.getString(R.string.save_success)
+        } else {
+            UserErrorText.from(context, result.exceptionOrNull()?.message)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.dns_settings_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад",
+                        )
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(stringResource(R.string.dns_mode_title), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = dnsMode == DnsMode.SYSTEM,
+                    onClick = { dnsMode = DnsMode.SYSTEM },
+                    label = { Text(stringResource(R.string.dns_mode_system)) },
+                )
+                FilterChip(
+                    selected = dnsMode == DnsMode.DOH,
+                    onClick = { dnsMode = DnsMode.DOH },
+                    label = { Text(stringResource(R.string.dns_mode_doh)) },
+                )
+            }
+
+            if (dnsMode == DnsMode.DOH) {
+                Text(stringResource(R.string.dns_presets_title), style = MaterialTheme.typography.labelLarge)
+                presets.forEach { preset ->
+                    Button(
+                        onClick = {
+                            customHost = preset.host
+                            customPath = preset.path
+                            customSni = preset.sni.orEmpty()
+                            selectedPresetName = preset.name
+                        },
+                        enabled = !dnsSaving,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(preset.name) }
+                }
+                selectedPresetName?.let { selected ->
+                    Text(
+                        text = stringResource(R.string.dns_selected_preset, selected),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                OutlinedTextField(
+                    value = customHost,
+                    onValueChange = { customHost = it },
+                    label = { Text(stringResource(R.string.dns_custom_host)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = customPath,
+                    onValueChange = { customPath = it },
+                    label = { Text(stringResource(R.string.dns_custom_path)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = customSni,
+                    onValueChange = { customSni = it },
+                    label = { Text(stringResource(R.string.dns_custom_sni)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+            }
+
+            if (dnsSaving) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+
+            status?.let {
+                Text(
+                    text = it,
+                    color = if (statusError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            Button(
+                onClick = {
+                    if (dnsMode == DnsMode.SYSTEM) {
+                        vm.saveDnsSystem(::applyDnsResult)
+                    } else {
+                        vm.saveDnsCustom(
+                            host = customHost,
+                            path = customPath,
+                            sni = customSni,
+                        ) { result -> applyDnsResult(result) }
+                    }
+                },
+                enabled = !dnsSaving,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.dns_save)) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileEditRoute(
+    vm: AppViewModel,
+    profileId: String,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val profiles by vm.profileList.collectAsState()
+    val profile = profiles.find { it.id == profileId }
+    if (profile == null) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Редактирование профиля") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Назад",
+                            )
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = UserErrorText.from(context, "profile_not_found"),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        return
+    }
+
+    var name by rememberSaveable(profileId) { mutableStateOf(profile.name) }
+    var host by rememberSaveable(profileId) { mutableStateOf(profile.host) }
+    var portText by rememberSaveable(profileId) { mutableStateOf(profile.port.toString()) }
+    var uuid by rememberSaveable(profileId) { mutableStateOf(profile.uuid) }
+    var security by rememberSaveable(profileId) { mutableStateOf(profile.security) }
+    var realityPublicKey by rememberSaveable(profileId) { mutableStateOf(profile.realityPublicKey.orEmpty()) }
+    var realityShortId by rememberSaveable(profileId) { mutableStateOf(profile.realityShortId.orEmpty()) }
+    var statusMessage by rememberSaveable(profileId) { mutableStateOf<String?>(null) }
+    var statusIsError by rememberSaveable(profileId) { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable(profileId) { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Редактирование профиля") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад",
+                        )
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Имя профиля") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = host,
+                onValueChange = { host = it },
+                label = { Text("Host") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = portText,
+                onValueChange = { portText = it },
+                label = { Text("Port") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = uuid,
+                onValueChange = { uuid = it },
+                label = { Text("UUID") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = security,
+                onValueChange = { security = it },
+                label = { Text("Security (tls/reality)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = realityPublicKey,
+                onValueChange = { realityPublicKey = it },
+                label = { Text("Reality Public Key") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = realityShortId,
+                onValueChange = { realityShortId = it },
+                label = { Text("Reality Short ID") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+
+            statusMessage?.let {
+                Text(
+                    text = it,
+                    color = if (statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            Button(
+                onClick = {
+                    val updated = profile.copy(
+                        name = name,
+                        host = host,
+                        port = portText.toIntOrNull() ?: -1,
+                        uuid = uuid,
+                        security = security,
+                        realityPublicKey = realityPublicKey,
+                        realityShortId = realityShortId,
+                    )
+                    vm.updateProfile(profileId, updated) { result ->
+                        if (result.isSuccess) {
+                            statusIsError = false
+                            statusMessage = context.getString(R.string.save_success)
+                            onBack()
+                        } else {
+                            statusIsError = true
+                            statusMessage = UserErrorText.from(context, result.exceptionOrNull()?.message)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Сохранить") }
+
+            Button(
+                onClick = { showDeleteDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Удалить профиль") }
+        }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Удаление профиля") },
+            text = { Text("Удалить этот профиль? Действие необратимо.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    vm.deleteProfile(profileId) { result ->
+                        if (result.isSuccess) {
+                            onBack()
+                        } else {
+                            statusIsError = true
+                            statusMessage = UserErrorText.from(context, result.exceptionOrNull()?.message)
+                        }
+                    }
+                }) { Text("Удалить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Отмена") }
+            },
+        )
     }
 }
 

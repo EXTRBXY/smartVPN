@@ -1,10 +1,8 @@
 import java.io.File
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
@@ -22,12 +20,6 @@ tasks.register("checkLibboxAar") {
 }
 
 tasks.named("preBuild").configure { dependsOn("checkLibboxAar") }
-
-tasks.withType<KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
-    }
-}
 
 android {
     namespace = providers.gradleProperty("app.namespace").get()

@@ -8,7 +8,6 @@ import android.net.VpnService
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.nothing.mobilecore.shared.application.SystemVpnPort
-import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.vpn.VpnRunningState
 import com.nothing.mobilecore.vpn.NothingVpnService
@@ -21,9 +20,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
-import java.net.InetSocketAddress
-import java.net.InetAddress
-import java.net.Socket
 import kotlin.coroutines.resume
 
 class AndroidSystemVpn(private val context: Context) : SystemVpnPort {
@@ -51,23 +47,14 @@ class AndroidSystemVpn(private val context: Context) : SystemVpnPort {
                             }
                         }
                         val filter = IntentFilter(VpnConnectResultContract.ACTION)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            app.registerReceiver(
-                                receiver,
-                                filter,
-                                VpnInternalBroadcastSecurity.PERMISSION,
-                                null,
-                                Context.RECEIVER_NOT_EXPORTED,
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            app.registerReceiver(
-                                receiver,
-                                filter,
-                                VpnInternalBroadcastSecurity.PERMISSION,
-                                null,
-                            )
-                        }
+                        ContextCompat.registerReceiver(
+                            app,
+                            receiver,
+                            filter,
+                            VpnInternalBroadcastSecurity.PERMISSION,
+                            null,
+                            ContextCompat.RECEIVER_NOT_EXPORTED,
+                        )
                         cont.invokeOnCancellation {
                             runCatching { app.unregisterReceiver(receiver) }
                         }
@@ -113,23 +100,14 @@ class AndroidSystemVpn(private val context: Context) : SystemVpnPort {
                         }
                     }
                     val filter = IntentFilter(VpnRunningStateContract.ACTION)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        app.registerReceiver(
-                            receiver,
-                            filter,
-                            VpnInternalBroadcastSecurity.PERMISSION,
-                            null,
-                            Context.RECEIVER_NOT_EXPORTED,
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        app.registerReceiver(
-                            receiver,
-                            filter,
-                            VpnInternalBroadcastSecurity.PERMISSION,
-                            null,
-                        )
-                    }
+                    ContextCompat.registerReceiver(
+                        app,
+                        receiver,
+                        filter,
+                        VpnInternalBroadcastSecurity.PERMISSION,
+                        null,
+                        ContextCompat.RECEIVER_NOT_EXPORTED,
+                    )
                     cont.invokeOnCancellation {
                         runCatching { app.unregisterReceiver(receiver) }
                     }
@@ -147,14 +125,9 @@ class AndroidSystemVpn(private val context: Context) : SystemVpnPort {
         runCatching {
             try {
                 withTimeout(7_000L) {
-                    val dnsTarget = if (policy.dnsMode == DnsMode.DOH) policy.dohServer else "one.one.one.one"
-                    runCatching { InetAddress.getByName(dnsTarget) }
-                        .getOrElse { throw IllegalStateException("smoke_dns_failed") }
-                    runCatching {
-                        Socket().use { socket ->
-                            socket.connect(InetSocketAddress("1.1.1.1", 443), 2_500)
-                        }
-                    }.getOrElse { throw IllegalStateException("smoke_tcp_failed") }
+                    LibboxProxyProbe.test("proxy").getOrElse {
+                        throw IllegalStateException("smoke_proxy_failed", it)
+                    }
                     if (!VpnRunningState.readPersisted(context)) {
                         error("vpn_not_running_after_connect")
                     }

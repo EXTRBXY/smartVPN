@@ -1,6 +1,6 @@
 package com.nothing.mobilecore.platform
 
-import kotlin.test.Test
+import org.junit.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
