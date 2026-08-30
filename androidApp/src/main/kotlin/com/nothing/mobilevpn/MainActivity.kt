@@ -7,7 +7,7 @@ import android.view.WindowManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.ResolveInfo
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.VpnService
@@ -112,6 +112,12 @@ private data class DnsPreset(
     val host: String,
     val path: String,
     val sni: String?,
+)
+
+private data class InstalledAppEntry(
+    val packageName: String,
+    val label: String,
+    val isSystem: Boolean,
 )
 
 private val dnsPresets = listOf(
@@ -238,37 +244,34 @@ private fun HomeRoute(
     val profiles by vm.profileList.collectAsState()
     val activeProfileId by vm.activeProfileId.collectAsState()
     val err by vm.lastError.collectAsState()
-    var version by remember { mutableStateOf<String?>(null) }
     var policyMode by rememberSaveable { mutableStateOf(RoutingMode.FULL_TUN) }
 
     LaunchedEffect(Unit) {
-        version = runCatching { vm.singBoxVersion() }.getOrNull()
         policyMode = vm.getTunnelPolicy().routingMode
     }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Nothing Mobile") }) },
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .fillMaxSize(),
         ) {
-            Text("Состояние: ${stateLabel(state)}", style = MaterialTheme.typography.titleMedium)
-            err?.let {
-                Text(
-                    context.getString(R.string.ui_error_prefix, UserErrorText.from(context, it)),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            version?.let { Text("sing-box: $it", style = MaterialTheme.typography.bodySmall) }
-
-            if (state is VpnSessionState.Connecting) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Состояние: ${stateLabel(state)}", style = MaterialTheme.typography.titleMedium)
+                err?.let {
+                    Text(
+                        context.getString(R.string.ui_error_prefix, UserErrorText.from(context, it)),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
 
             Text("Режим маршрутизации", style = MaterialTheme.typography.labelLarge)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -326,21 +329,29 @@ private fun HomeRoute(
 
             Button(
                 onClick = {
-                    onPrepareVpnAndConnect { vm.connect() }
+                    if (state is VpnSessionState.Connected ||
+                        state is VpnSessionState.Connecting ||
+                        state is VpnSessionState.Recovering
+                    ) {
+                        vm.disconnect()
+                    } else {
+                        onPrepareVpnAndConnect { vm.connect() }
+                    }
                 },
-                enabled = state !is VpnSessionState.Connecting &&
-                    state !is VpnSessionState.Recovering &&
-                    state !is VpnSessionState.Connected,
+                enabled = state !is VpnSessionState.Disconnecting,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Подключить") }
-
-            Button(
-                onClick = { vm.disconnect() },
-                enabled = state is VpnSessionState.Connected ||
-                    state is VpnSessionState.Connecting ||
-                    state is VpnSessionState.Recovering,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Отключить") }
+            ) {
+                Text(
+                    if (state is VpnSessionState.Connected ||
+                        state is VpnSessionState.Connecting ||
+                        state is VpnSessionState.Recovering
+                    ) {
+                        "Отключить"
+                    } else {
+                        "Подключить"
+                    },
+                )
+            }
 
             Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
                 Text("Импорт vless://")
@@ -349,10 +360,19 @@ private fun HomeRoute(
                 Text(stringResource(R.string.home_dns_button))
             }
 
-            if (policyMode == RoutingMode.PER_APP_ALLOWED || policyMode == RoutingMode.PER_APP_EXCLUDED) {
-                Button(onClick = onApps, modifier = Modifier.fillMaxWidth()) {
-                    Text("Выбрать приложения…")
+                if (policyMode == RoutingMode.PER_APP_ALLOWED || policyMode == RoutingMode.PER_APP_EXCLUDED) {
+                    Button(onClick = onApps, modifier = Modifier.fillMaxWidth()) {
+                        Text("Выбрать приложения…")
+                    }
                 }
+            }
+
+            if (state is VpnSessionState.Connecting || state is VpnSessionState.Recovering) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth(),
+                )
             }
         }
     }
@@ -786,21 +806,35 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     val myPkg = context.packageName
     val pm = context.packageManager
-    val apps = remember(pm, myPkg) {
-        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        @Suppress("DEPRECATION")
-        val resolved: List<ResolveInfo> = pm.queryIntentActivities(launcherIntent, 0)
-        resolved
-            .asSequence()
-            .mapNotNull { info ->
-                val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
-                if (pkg == myPkg) return@mapNotNull null
-                val label = runCatching { info.loadLabel(pm).toString() }.getOrDefault(pkg)
-                pkg to label
+    var apps by remember { mutableStateOf<List<InstalledAppEntry>?>(null) }
+
+    LaunchedEffect(pm, myPkg) {
+        apps = withContext(Dispatchers.IO) {
+            val installed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledApplications(0)
             }
-            .sortedBy { it.second.lowercase(Locale.getDefault()) }
-            .distinctBy { it.first }
-            .toList()
+            installed
+                .asSequence()
+                .filter { it.packageName != myPkg }
+                .map { info ->
+                    InstalledAppEntry(
+                        packageName = info.packageName,
+                        label = runCatching { pm.getApplicationLabel(info).toString() }
+                            .getOrDefault(info.packageName),
+                        isSystem = info.flags and ApplicationInfo.FLAG_SYSTEM != 0 ||
+                            info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0,
+                    )
+                }
+                .distinctBy { it.packageName }
+                .sortedWith(
+                    compareBy<InstalledAppEntry> { it.label.lowercase(Locale.getDefault()) }
+                        .thenBy { it.packageName },
+                )
+                .toList()
+        }
     }
 
     var splitMode by rememberSaveable { mutableStateOf(RoutingMode.PER_APP_ALLOWED) }
@@ -814,7 +848,8 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
     var showUnsavedDialog by rememberSaveable { mutableStateOf(false) }
     val splitTunnelSaving by vm.splitTunnelSaving.collectAsState()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(apps) {
+        val loadedApps = apps ?: return@LaunchedEffect
         val policy = vm.getTunnelPolicy()
         splitMode = when (policy.routingMode) {
             RoutingMode.PER_APP_EXCLUDED -> RoutingMode.PER_APP_EXCLUDED
@@ -822,7 +857,7 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
             RoutingMode.FULL_TUN -> RoutingMode.PER_APP_ALLOWED
         }
         val marked = policy.allowedPackageNames.toSet()
-        apps.forEach { (pkg, _) -> selected[pkg] = pkg in marked }
+        loadedApps.forEach { app -> selected[app.packageName] = app.packageName in marked }
         initialMode = splitMode
         initialSelected = marked
         listReady = true
@@ -830,11 +865,12 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
 
     val filtered = remember(apps, search) {
         val q = search.trim().lowercase(Locale.getDefault())
-        if (q.isEmpty()) apps
+        val loadedApps = apps.orEmpty()
+        if (q.isEmpty()) loadedApps
         else {
-            apps.filter { (pkg, label) ->
-                pkg.lowercase(Locale.getDefault()).contains(q) ||
-                    label.lowercase(Locale.getDefault()).contains(q)
+            loadedApps.filter { app ->
+                app.packageName.lowercase(Locale.getDefault()).contains(q) ||
+                    app.label.lowercase(Locale.getDefault()).contains(q)
             }
         }
     }
@@ -873,15 +909,15 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
     val chosenApps by remember(filtered, collator) {
         derivedStateOf {
             filtered
-                .filter { selected[it.first] == true }
-                .sortedWith(compareBy(collator) { it.second })
+                .filter { selected[it.packageName] == true }
+                .sortedWith(compareBy(collator) { it.label })
         }
     }
     val otherApps by remember(filtered, collator) {
         derivedStateOf {
             filtered
-                .filter { selected[it.first] != true }
-                .sortedWith(compareBy(collator) { it.second })
+                .filter { selected[it.packageName] != true }
+                .sortedWith(compareBy(collator) { it.label })
         }
     }
 
@@ -983,7 +1019,7 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
                 )
             }
 
-            if (!listReady) {
+            if (!listReady || apps == null) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             } else {
                 LazyColumn(
@@ -1001,15 +1037,15 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
                         }
                         items(
                             items = chosenApps,
-                            key = { "c:${it.first}" },
+                            key = { "c:${it.packageName}" },
                             contentType = { "app_row" },
-                        ) { (pkg, label) ->
+                        ) { app ->
                             AppPickerRow(
                                 pm = pm,
-                                packageName = pkg,
-                                label = label,
+                                packageName = app.packageName,
+                                label = if (app.isSystem) "${app.label} · системное" else app.label,
                                 checked = true,
-                                onCheckedChange = { selected[pkg] = it },
+                                onCheckedChange = { selected[app.packageName] = it },
                             )
                         }
                         if (otherApps.isNotEmpty()) {
@@ -1029,15 +1065,15 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
                         }
                         items(
                             items = otherApps,
-                            key = { "o:${it.first}" },
+                            key = { "o:${it.packageName}" },
                             contentType = { "app_row" },
-                        ) { (pkg, label) ->
+                        ) { app ->
                             AppPickerRow(
                                 pm = pm,
-                                packageName = pkg,
-                                label = label,
+                                packageName = app.packageName,
+                                label = if (app.isSystem) "${app.label} · системное" else app.label,
                                 checked = false,
-                                onCheckedChange = { selected[pkg] = it },
+                                onCheckedChange = { selected[app.packageName] = it },
                             )
                         }
                     }

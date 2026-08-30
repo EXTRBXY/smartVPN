@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Nothing Mobile</string>
     <string name="vpn_notification_title">VPN активен</string>
-    <string name="vpn_notification_text">sing-box</string>
+    <string name="vpn_notification_text">VPN подключён</string>
     <string name="action_disconnect">Отключить</string>
     <string name="qs_tile_label">Nothing Mobile</string>
     <string name="qs_tile_subtitle_on">Включён</string>
@@ -22,7 +22,7 @@
     <string name="user_error_secret_unavailable">Секреты профиля недоступны. Переимпортируйте профиль.</string>
     <string name="user_error_health_dns">Проверка туннеля не прошла: проблема DNS.</string>
     <string name="user_error_health_tcp">Проверка туннеля не прошла: нет сетевой связности.</string>
-    <string name="user_error_health_proxy">Проверка туннеля не прошла: прокси-сервер недоступен через sing-box.</string>
+    <string name="user_error_health_proxy">Проверка туннеля не прошла: прокси-сервер недоступен.</string>
     <string name="user_error_health_timeout">Проверка туннеля заняла слишком много времени.</string>
     <string name="user_error_needs_location">Для текущего режима нужен доступ к геоданным (точное местоположение).</string>
     <string name="user_error_reality_profile">Профиль Reality заполнен не полностью.</string>

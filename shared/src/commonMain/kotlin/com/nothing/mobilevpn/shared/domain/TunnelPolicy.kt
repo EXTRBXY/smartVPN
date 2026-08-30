@@ -70,5 +70,5 @@ fun TunnelPolicy.validate(): Result<Unit> = runCatching {
     // Ограничиваем размер списка и пустые значения, чтобы не создавать невалидные include/exclude.
     val normalizedCount = allowedPackageNames.count { it.isNotBlank() }
     require(normalizedCount == allowedPackageNames.size) { "invalid_package_name" }
-    require(normalizedCount <= 512) { "too_many_packages" }
+    require(normalizedCount <= 4096) { "too_many_packages" }
 }

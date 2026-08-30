@@ -17,6 +17,41 @@ import kotlin.test.assertTrue
 
 class VpnSessionControllerRecoveryTest {
     @Test
+    fun connecting_ignoresExpectedIntermediateStoppedBroadcast() = runBlocking {
+        val profile = VlessProfile(
+            id = "p1",
+            name = "test",
+            uuid = "12345678-1234-4123-8123-123456789abc",
+            host = "example.com",
+            port = 443,
+        )
+        val repo = FakeProfileRepository(
+            profile,
+            TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = true),
+        )
+        val compiler = object : SingBoxConfigCompilerPort {
+            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
+        }
+        val systemVpn = FakeSystemVpn(failStartTimes = 0, connectDelayMs = 100)
+        val ctrl = VpnSessionController(
+            repo,
+            compiler,
+            SingBoxCoreInfoPort { "1.0.0" },
+            systemVpn,
+            SessionConfigWriter { "/tmp/session.json" },
+        )
+
+        val connecting = async { ctrl.connectSuspend() }
+        delay(10)
+        ctrl.applyExternalTunnelRunning(false)
+
+        assertTrue(ctrl.state.value is VpnSessionState.Connecting)
+        assertNull(ctrl.lastError.value)
+        assertTrue(connecting.await().isSuccess)
+        assertTrue(ctrl.state.value is VpnSessionState.Connected)
+    }
+
+    @Test
     fun connectSuspend_retriesUntilSuccess() = runBlocking {
         val profile = VlessProfile(
             id = "p1",

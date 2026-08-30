@@ -35,13 +35,13 @@ class VpnQuickTileService : TileService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val graph by lazy { (application as NothingVpnApp).graph }
+    private var receiverRegistered = false
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != VpnRunningStateContract.ACTION) return
             val running = intent.getBooleanExtra(VpnRunningStateContract.EXTRA_RUNNING, false)
             scope.launch(Dispatchers.Default) {
-                VpnRunningState.syncFromDisk(this@VpnQuickTileService)
                 val hasProfile = graph.profileRepository.getActiveProfileId() != null
                 withContext(Dispatchers.Main) {
                     if (!hasProfile) {
@@ -57,15 +57,18 @@ class VpnQuickTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         VpnRunningState.syncFromDisk(this)
-        val filter = IntentFilter(VpnRunningStateContract.ACTION)
-        ContextCompat.registerReceiver(
-            this,
-            stateReceiver,
-            filter,
-            VpnInternalBroadcastSecurity.PERMISSION,
-            null,
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
+        if (!receiverRegistered) {
+            val filter = IntentFilter(VpnRunningStateContract.ACTION)
+            ContextCompat.registerReceiver(
+                this,
+                stateReceiver,
+                filter,
+                VpnInternalBroadcastSecurity.PERMISSION,
+                null,
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            receiverRegistered = true
+        }
         scope.launch(Dispatchers.Default) {
             val hasProfile = graph.profileRepository.getActiveProfileId() != null
             withContext(Dispatchers.Main) {
@@ -79,7 +82,10 @@ class VpnQuickTileService : TileService() {
     }
 
     override fun onStopListening() {
-        runCatching { unregisterReceiver(stateReceiver) }
+        if (receiverRegistered) {
+            runCatching { unregisterReceiver(stateReceiver) }
+            receiverRegistered = false
+        }
         super.onStopListening()
     }
 
@@ -95,6 +101,7 @@ class VpnQuickTileService : TileService() {
     @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun handleClick() {
         if (VpnRunningState.isRunning) {
+            setBusyTile(running = true)
             scope.launch(Dispatchers.Default) {
                 graph.sessionController.disconnectSuspend()
             }
@@ -119,10 +126,12 @@ class VpnQuickTileService : TileService() {
             }
             return
         }
+        setBusyTile(running = false)
         scope.launch(Dispatchers.Default) {
             val activeId = graph.profileRepository.getActiveProfileId()
             if (activeId == null) {
                 withContext(Dispatchers.Main) {
+                    setUnavailableTile()
                     Toast.makeText(
                         this@VpnQuickTileService,
                         R.string.qs_tile_no_profile_toast,
@@ -134,6 +143,7 @@ class VpnQuickTileService : TileService() {
             val profile = graph.profileRepository.listProfiles().find { it.id == activeId }
             if (profile == null) {
                 withContext(Dispatchers.Main) {
+                    setUnavailableTile()
                     Toast.makeText(
                         this@VpnQuickTileService,
                         R.string.qs_tile_no_profile_toast,
@@ -152,6 +162,7 @@ class VpnQuickTileService : TileService() {
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
+                withContext(Dispatchers.Main) { refreshTileUi(false) }
             }
         }
     }
@@ -179,6 +190,17 @@ class VpnQuickTileService : TileService() {
                     R.string.qs_tile_subtitle_off
                 },
             )
+        }
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_vpn)
+        tile.updateTile()
+    }
+
+    private fun setBusyTile(running: Boolean) {
+        val tile = qsTile ?: return
+        tile.state = Tile.STATE_UNAVAILABLE
+        tile.label = getString(R.string.qs_tile_label)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            tile.subtitle = if (running) "Отключение…" else "Подключение…"
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_vpn)
         tile.updateTile()

@@ -173,6 +173,10 @@ class VpnSessionController(
                 _state.value = VpnSessionState.Connected
             }
         } else {
+            // The Android service deliberately publishes a short stopped state while it
+            // tears down the previous core before a new connection. It is expected during
+            // connect/recovery and must not be presented as a failed tunnel startup.
+            if (_state.value is VpnSessionState.Connecting || _state.value is VpnSessionState.Recovering) return
             if (_state.value is VpnSessionState.Disconnected || _state.value is VpnSessionState.Disconnecting) return
             if (lastPolicyFailClosed) {
                 _lastError.value = LogRedaction.redactUserMessage("vpn_not_running_after_connect")

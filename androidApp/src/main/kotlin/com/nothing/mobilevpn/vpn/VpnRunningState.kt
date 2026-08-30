@@ -2,7 +2,6 @@ package com.nothing.mobilecore.vpn
 
 import android.content.Context
 import android.content.Intent
-import android.app.ActivityManager
 import com.nothing.mobilecore.quicksettings.VpnQuickTileRefresh
 
 object VpnRunningState {
@@ -14,16 +13,9 @@ object VpnRunningState {
         private set
 
     fun syncFromDisk(context: Context) {
-        val persisted = readPersisted(context)
-        val runtime = isServiceRunning(context)
-        isRunning = persisted || runtime
-        if (isRunning != persisted) {
-            context.applicationContext
-                .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY, isRunning)
-                .apply()
-        }
+        // Service existence is not connection state: during startup/teardown it remains alive
+        // while the tunnel is not usable. The service publishes the authoritative result.
+        isRunning = readPersisted(context)
     }
 
     fun readPersisted(context: Context): Boolean =
@@ -46,13 +38,5 @@ object VpnRunningState {
             VpnInternalBroadcastSecurity.PERMISSION,
         )
         VpnQuickTileRefresh.requestUpdate(app)
-    }
-
-    private fun isServiceRunning(context: Context): Boolean {
-        val am = context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            ?: return false
-        @Suppress("DEPRECATION")
-        return am.getRunningServices(Int.MAX_VALUE)
-            .any { it.service.className == "com.nothing.mobilecore.vpn.NothingVpnService" }
     }
 }
