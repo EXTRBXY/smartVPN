@@ -7,6 +7,7 @@ import com.nothing.mobilecore.quicksettings.VpnQuickTileRefresh
 object VpnRunningState {
     private const val PREFS = "nothing_vpn_running_flag"
     private const val KEY = "running"
+    private const val KEY_STARTED_AT = "started_at"
 
     @Volatile
     var isRunning: Boolean = false
@@ -24,12 +25,12 @@ object VpnRunningState {
             .getBoolean(KEY, false)
 
     fun publish(context: Context, running: Boolean) {
+        val wasRunning = isRunning
         isRunning = running
         val app = context.applicationContext
-        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY, running)
-            .commit()
+        val editor = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY, running)
+        if (running && !wasRunning) editor.putLong(KEY_STARTED_AT, System.currentTimeMillis())
+        editor.commit()
         app.sendBroadcast(
             Intent(VpnRunningStateContract.ACTION).apply {
                 setPackage(app.packageName)
@@ -39,4 +40,8 @@ object VpnRunningState {
         )
         VpnQuickTileRefresh.requestUpdate(app)
     }
+
+    fun startedAt(context: Context): Long = context.applicationContext
+        .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getLong(KEY_STARTED_AT, 0L)
 }

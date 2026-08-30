@@ -5,15 +5,19 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.view.WindowManager
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.VpnService
+import android.provider.Settings
 import android.os.Build
 import android.os.Bundle
 import android.util.LruCache
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.content.ContextCompat
@@ -54,6 +58,7 @@ import com.nothing.mobilecore.ui.NothingVpnTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -64,6 +69,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,6 +82,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -92,10 +99,14 @@ import com.nothing.mobilecore.vpn.VpnInternalBroadcastSecurity
 import com.nothing.mobilecore.vpn.VpnRunningState
 import com.nothing.mobilecore.vpn.VpnRunningStateContract
 import com.nothing.mobilecore.ui.UserErrorText
+import com.nothing.mobilecore.platform.ConnectionEventLog
+import com.nothing.mobilecore.platform.TunnelStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 private val appIconCacheMaxBytes =
     (Runtime.getRuntime().maxMemory() / 24).toInt().coerceIn(8 * 1024 * 1024, 64 * 1024 * 1024)
@@ -123,9 +134,27 @@ private data class InstalledAppEntry(
 private val dnsPresets = listOf(
     DnsPreset("Cloudflare", "1.1.1.1", "/dns-query", "cloudflare-dns.com"),
     DnsPreset("Google", "8.8.8.8", "/dns-query", "dns.google"),
+    DnsPreset("Quad9", "9.9.9.9", "/dns-query", "dns.quad9.net"),
+    DnsPreset("AdGuard", "94.140.14.14", "/dns-query", "dns.adguard-dns.com"),
 )
 
 class MainActivity : ComponentActivity() {
+
+    private val qrScannerLauncher = registerForActivityResult(ScanContract()) { result ->
+        val link = result.contents ?: return@registerForActivityResult
+        val graph = (application as NothingVpnApp).graph
+        lifecycleScope.launch {
+            graph.sessionController.importVlessLink(link)
+                .onSuccess { profile ->
+                    graph.profileRepository.upsert(profile)
+                    graph.profileRepository.setActiveProfileId(profile.id)
+                    Toast.makeText(this@MainActivity, "Профиль импортирован", Toast.LENGTH_SHORT).show()
+                }
+                .onFailure {
+                    Toast.makeText(this@MainActivity, "QR-код не содержит корректный профиль", Toast.LENGTH_LONG).show()
+                }
+        }
+    }
 
     private val vpnRunningReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -167,8 +196,18 @@ class MainActivity : ComponentActivity() {
                         HomeRoute(
                             vm = vm,
                             onImport = { nav.navigate("import") },
+                            onScanQr = {
+                                qrScannerLauncher.launch(
+                                    ScanOptions()
+                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                        .setPrompt("Наведите камеру на QR-код профиля")
+                                        .setBeepEnabled(false),
+                                )
+                            },
                             onApps = { nav.navigate("apps") },
                             onDns = { nav.navigate("dns") },
+                            onSettings = { nav.navigate("settings") },
+                            onDiagnostics = { nav.navigate("diagnostics") },
                             onEditProfile = { profileId -> nav.navigate("profile/edit/$profileId") },
                             onPrepareVpnAndConnect = { connect ->
                                 val intent = VpnService.prepare(this@MainActivity)
@@ -188,7 +227,16 @@ class MainActivity : ComponentActivity() {
                         AppsRoute(vm = vm, onBack = { nav.popBackStack() })
                     }
                     composable("dns") {
-                        DnsRoute(vm = vm, onBack = { nav.popBackStack() })
+                        DnsRoute(vm = vm, onBack = { nav.popBackStack() }, onDnsApps = { nav.navigate("dns/apps") })
+                    }
+                    composable("dns/apps") {
+                        DnsAppsRoute(vm = vm, onBack = { nav.popBackStack() })
+                    }
+                    composable("settings") {
+                        SettingsRoute(vm = vm, onBack = { nav.popBackStack() })
+                    }
+                    composable("diagnostics") {
+                        DiagnosticsRoute(vm = vm, onBack = { nav.popBackStack() })
                     }
                     composable(
                         route = "profile/edit/{profileId}",
@@ -234,8 +282,11 @@ class MainActivity : ComponentActivity() {
 private fun HomeRoute(
     vm: AppViewModel,
     onImport: () -> Unit,
+    onScanQr: () -> Unit,
     onApps: () -> Unit,
     onDns: () -> Unit,
+    onSettings: () -> Unit,
+    onDiagnostics: () -> Unit,
     onEditProfile: (String) -> Unit,
     onPrepareVpnAndConnect: (connect: () -> Unit) -> Unit,
 ) {
@@ -244,10 +295,32 @@ private fun HomeRoute(
     val profiles by vm.profileList.collectAsState()
     val activeProfileId by vm.activeProfileId.collectAsState()
     val err by vm.lastError.collectAsState()
+    val tunnelStats by vm.tunnelStats.collectAsState()
+    val scope = rememberCoroutineScope()
+    val latencies = remember { mutableStateMapOf<String, String>() }
+    var pendingExportId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingSwitchId by rememberSaveable { mutableStateOf<String?>(null) }
+    var checkingFastest by rememberSaveable { mutableStateOf(false) }
+    var showErrorDetails by rememberSaveable { mutableStateOf(false) }
+    var profileActionStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    var clockNow by remember { mutableStateOf(System.currentTimeMillis()) }
+    val displayedProfiles = remember(profiles) {
+        profiles.sortedWith(
+            compareByDescending<com.nothing.mobilecore.shared.domain.VlessProfile> { it.favorite }
+                .thenBy { it.sortOrder }
+                .thenBy { it.name.lowercase(Locale.getDefault()) },
+        )
+    }
     var policyMode by rememberSaveable { mutableStateOf(RoutingMode.FULL_TUN) }
 
     LaunchedEffect(Unit) {
         policyMode = vm.getTunnelPolicy().routingMode
+    }
+    LaunchedEffect(state) {
+        while (state is VpnSessionState.Connected) {
+            clockNow = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1_000)
+        }
     }
 
     Scaffold(
@@ -265,12 +338,33 @@ private fun HomeRoute(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Состояние: ${stateLabel(state)}", style = MaterialTheme.typography.titleMedium)
+                TunnelStatsCard(
+                    stats = if (state is VpnSessionState.Connected) tunnelStats else TunnelStats(),
+                    durationMs = if (state is VpnSessionState.Connected) {
+                        (clockNow - VpnRunningState.startedAt(context)).coerceAtLeast(0)
+                    } else 0L,
+                    state = state,
+                    network = currentNetworkLabel(context),
+                    onToggle = {
+                        if (state is VpnSessionState.Connected || state is VpnSessionState.Connecting || state is VpnSessionState.Recovering) {
+                            vm.disconnect()
+                        } else {
+                            onPrepareVpnAndConnect { vm.connect() }
+                        }
+                    },
+                )
                 err?.let {
                     Text(
                         context.getString(R.string.ui_error_prefix, UserErrorText.from(context, it)),
                         color = MaterialTheme.colorScheme.error,
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onPrepareVpnAndConnect { vm.connect() } }) { Text("Повторить") }
+                        TextButton(onClick = { showErrorDetails = !showErrorDetails }) { Text("Подробности") }
+                    }
+                    if (showErrorDetails) {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
 
             Text("Режим маршрутизации", style = MaterialTheme.typography.labelLarge)
@@ -302,10 +396,35 @@ private fun HomeRoute(
             }
 
             Text("Профили (${profiles.size})", style = MaterialTheme.typography.labelLarge)
-            profiles.forEach { p ->
+            if (profiles.size > 1) {
+                TextButton(
+                    onClick = {
+                        checkingFastest = true
+                        scope.launch {
+                            vm.findFastestProfile().onSuccess { (id, latency) ->
+                                if (state is VpnSessionState.Connected && id != activeProfileId) {
+                                    pendingSwitchId = id
+                                } else {
+                                    vm.setActiveProfile(id)
+                                }
+                                profileActionStatus = "Минимальная задержка: $latency мс"
+                            }.onFailure { profileActionStatus = "Доступных серверов не найдено" }
+                            checkingFastest = false
+                        }
+                    },
+                    enabled = !checkingFastest,
+                ) { Text(if (checkingFastest) "Проверяем серверы…" else "Выбрать самый быстрый") }
+            }
+            displayedProfiles.forEach { p ->
                 val isActive = p.id == activeProfileId
                 Card(
-                    onClick = { vm.setActiveProfile(p.id) },
+                    onClick = {
+                        if (state is VpnSessionState.Connected && p.id != activeProfileId) {
+                            pendingSwitchId = p.id
+                        } else {
+                            vm.setActiveProfile(p.id)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
@@ -322,42 +441,48 @@ private fun HomeRoute(
                             TextButton(onClick = { onEditProfile(p.id) }) {
                                 Text("Редактировать")
                             }
+                            TextButton(onClick = {
+                                latencies[p.id] = "Проверка…"
+                                scope.launch {
+                                    latencies[p.id] = vm.testProfileLatency(p.id)
+                                        .fold(onSuccess = { "$it мс" }, onFailure = { "Недоступен" })
+                                }
+                            }) { Text(latencies[p.id] ?: "Задержка") }
+                            TextButton(onClick = { vm.setProfileFavorite(p.id, !p.favorite) }) {
+                                Text(if (p.favorite) "★" else "☆")
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                vm.duplicateProfile(p.id) { result ->
+                                    profileActionStatus = if (result.isSuccess) "Профиль продублирован" else "Не удалось создать копию"
+                                }
+                            }) { Text("Копия") }
+                            TextButton(onClick = { pendingExportId = p.id }) { Text("Поделиться") }
                         }
                     }
                 }
             }
 
-            Button(
-                onClick = {
-                    if (state is VpnSessionState.Connected ||
-                        state is VpnSessionState.Connecting ||
-                        state is VpnSessionState.Recovering
-                    ) {
-                        vm.disconnect()
-                    } else {
-                        onPrepareVpnAndConnect { vm.connect() }
-                    }
-                },
-                enabled = state !is VpnSessionState.Disconnecting,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    if (state is VpnSessionState.Connected ||
-                        state is VpnSessionState.Connecting ||
-                        state is VpnSessionState.Recovering
-                    ) {
-                        "Отключить"
-                    } else {
-                        "Подключить"
-                    },
-                )
-            }
+            profileActionStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
             Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
                 Text("Импорт vless://")
             }
+            Button(onClick = onScanQr, modifier = Modifier.fillMaxWidth()) {
+                Text("Сканировать QR-код")
+            }
             Button(onClick = onDns, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.home_dns_button))
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSettings, modifier = Modifier.weight(1f)) {
+                    Text("Настройки")
+                }
+                Button(onClick = onDiagnostics, modifier = Modifier.weight(1f)) {
+                    Text("Диагностика")
+                }
             }
 
                 if (policyMode == RoutingMode.PER_APP_ALLOWED || policyMode == RoutingMode.PER_APP_EXCLUDED) {
@@ -376,20 +501,344 @@ private fun HomeRoute(
             }
         }
     }
+
+    pendingExportId?.let { profileId ->
+        AlertDialog(
+            onDismissRequest = { pendingExportId = null },
+            title = { Text("Передать профиль?") },
+            text = { Text("Ссылка содержит UUID и параметры доступа. Передавайте её только тому, кому доверяете.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingExportId = null
+                    scope.launch {
+                        vm.exportProfile(profileId).onSuccess { link ->
+                            context.startActivity(
+                                Intent.createChooser(
+                                    Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, link)
+                                    },
+                                    "Передать VPN-профиль",
+                                ),
+                            )
+                        }.onFailure {
+                            profileActionStatus = "Не удалось экспортировать профиль"
+                        }
+                    }
+                }) { Text("Передать") }
+            },
+            dismissButton = { TextButton(onClick = { pendingExportId = null }) { Text("Отмена") } },
+        )
+    }
+    pendingSwitchId?.let { profileId ->
+        AlertDialog(
+            onDismissRequest = { pendingSwitchId = null },
+            title = { Text("Сменить сервер?") },
+            text = { Text("VPN будет отключён и подключён заново с выбранным профилем.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingSwitchId = null
+                    vm.switchActiveProfileAndReconnect(profileId) { result ->
+                        if (result.isFailure) profileActionStatus = "Переподключение не удалось"
+                    }
+                }) { Text("Переподключиться") }
+            },
+            dismissButton = { TextButton(onClick = { pendingSwitchId = null }) { Text("Отмена") } },
+        )
+    }
+}
+
+@Composable
+private fun TunnelStatsCard(stats: TunnelStats, durationMs: Long, state: VpnSessionState, network: String, onToggle: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (state is VpnSessionState.Connected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(stateLabel(state), style = MaterialTheme.typography.titleLarge)
+            Text("Подключено: ${formatDuration(durationMs)}", style = MaterialTheme.typography.bodySmall)
+            Text("Сеть: $network", style = MaterialTheme.typography.bodySmall)
+            Text("↓ ${formatBytes(stats.downloadTotal)}   ↑ ${formatBytes(stats.uploadTotal)}")
+            Text(
+                "Сейчас: ↓ ${formatBytes(stats.downloadBytesPerSecond)}/с   ↑ ${formatBytes(stats.uploadBytesPerSecond)}/с",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Активных соединений: ${stats.activeConnections}", style = MaterialTheme.typography.bodySmall)
+            Button(onClick = onToggle, enabled = state !is VpnSessionState.Disconnecting, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    if (state is VpnSessionState.Connected || state is VpnSessionState.Connecting || state is VpnSessionState.Recovering) {
+                        "Отключить"
+                    } else {
+                        "Подключить"
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val seconds = durationMs / 1_000
+    val hours = seconds / 3_600
+    val minutes = (seconds % 3_600) / 60
+    val rest = seconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, rest) else "%02d:%02d".format(minutes, rest)
+}
+
+private fun currentNetworkLabel(context: Context): String {
+    val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+    @Suppress("DEPRECATION")
+    val capabilities = manager.allNetworks.mapNotNull { manager.getNetworkCapabilities(it) }
+        .firstOrNull {
+            it.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                !it.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
+        } ?: return "нет подключения"
+    return when {
+        capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+        capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "Мобильная"
+        capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+        else -> "Другая"
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes < 1_024) return "$bytes Б"
+    val units = arrayOf("КБ", "МБ", "ГБ", "ТБ")
+    var value = bytes.toDouble()
+    var index = -1
+    while (value >= 1_024 && index < units.lastIndex) {
+        value /= 1_024
+        index++
+    }
+    return String.format(Locale.getDefault(), "%.1f %s", value, units[index])
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit) {
+private fun SettingsRoute(vm: AppViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val app = context.applicationContext as NothingVpnApp
+    val initial = remember { vm.automationSettings() }
+    var autoStart by rememberSaveable { mutableStateOf(initial.autoStartAfterBoot) }
+    var autoReconnect by rememberSaveable { mutableStateOf(initial.autoReconnect) }
+    var untrustedWifi by rememberSaveable { mutableStateOf(initial.connectOnUntrustedWifi) }
+    var healthCheck by rememberSaveable { mutableStateOf(initial.periodicHealthCheck) }
+    var trustedWifi by rememberSaveable { mutableStateOf(initial.trustedWifiNames.joinToString("\n")) }
+    val currentWifi = remember { app.automation.currentWifiName() }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Настройки") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SettingSwitch("Подключаться после перезагрузки", autoStart) {
+                autoStart = it
+                vm.setAutoStart(it)
+            }
+            SettingSwitch("Восстанавливать соединение", autoReconnect) {
+                autoReconnect = it
+                vm.setAutoReconnect(it)
+            }
+            SettingSwitch("Подключаться в недоверенных Wi‑Fi", untrustedWifi) {
+                untrustedWifi = it
+                vm.setConnectOnUntrustedWifi(it)
+                if (it && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    (context as? Activity)?.requestPermissions(
+                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                        10,
+                    )
+                }
+            }
+            SettingSwitch("Периодически проверять туннель", healthCheck) {
+                healthCheck = it
+                vm.setPeriodicHealthCheck(it)
+            }
+
+            Text("Доверенные Wi‑Fi", style = MaterialTheme.typography.labelLarge)
+            Text(
+                currentWifi?.let { "Текущая сеть: $it" }
+                    ?: "Имя текущей сети недоступно — проверьте разрешение геолокации.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedTextField(
+                value = trustedWifi,
+                onValueChange = { trustedWifi = it },
+                label = { Text("По одному имени сети в строке") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = {
+                    vm.setTrustedWifiNames(trustedWifi.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toSet())
+                    Toast.makeText(context, "Список сохранён", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Сохранить доверенные сети") }
+
+            HorizontalDivider()
+            Text("Kill Switch", style = MaterialTheme.typography.labelLarge)
+            Text(
+                "Строгую блокировку трафика включает Android: выберите Nothing Mobile как постоянный VPN и включите блокировку соединений без VPN.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Button(
+                onClick = {
+                    runCatching { context.startActivity(Intent(Settings.ACTION_VPN_SETTINGS)) }
+                        .onFailure { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Открыть системные настройки VPN") }
+        }
+    }
+}
+
+@Composable
+private fun SettingSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DiagnosticsRoute(vm: AppViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val state by vm.sessionState.collectAsState()
+    val stats by vm.tunnelStats.collectAsState()
+    var events by remember { mutableStateOf(ConnectionEventLog.read(context)) }
+    var externalIp by rememberSaveable { mutableStateOf<String?>(null) }
+    var ipLoading by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val report = remember(state, stats, events, externalIp) {
+        buildString {
+            appendLine("Nothing Mobile ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT}")
+            appendLine("Устройство: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("VPN: ${stateLabel(state)}")
+            appendLine("Сеть: ${currentNetworkLabel(context)}")
+            appendLine("Разрешение VPN: ${if (VpnService.prepare(context) == null) "предоставлено" else "не предоставлено"}")
+            appendLine("Трафик: down=${stats.downloadTotal}, up=${stats.uploadTotal}, connections=${stats.activeConnections}")
+            appendLine("Внешний IP: ${externalIp ?: "не проверялся"}")
+            appendLine("События:")
+            events.forEach { appendLine(it) }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Диагностика") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Состояние: ${stateLabel(state)}")
+            Text("Версия: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            Text("Android ${Build.VERSION.RELEASE} · ${Build.MANUFACTURER} ${Build.MODEL}")
+            Text("Внешний IP: ${externalIp ?: "не проверялся"}")
+            Button(
+                onClick = {
+                    ipLoading = true
+                    scope.launch {
+                        externalIp = vm.externalIp().getOrElse { "не удалось определить" }
+                        ipLoading = false
+                    }
+                },
+                enabled = !ipLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (ipLoading) "Проверка…" else "Проверить внешний IP") }
+            Text("Секреты, UUID и содержимое профилей в отчёт не включаются.", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val clipboard = context.getSystemService(ClipboardManager::class.java)
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Nothing Mobile diagnostics", report))
+                        Toast.makeText(context, "Отчёт скопирован", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Копировать") }
+                Button(
+                    onClick = {
+                        context.startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, report)
+                                },
+                                "Передать отчёт",
+                            ),
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Поделиться") }
+            }
+            HorizontalDivider()
+            Text("Последние события", style = MaterialTheme.typography.labelLarge)
+            if (events.isEmpty()) Text("Событий пока нет", style = MaterialTheme.typography.bodySmall)
+            events.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (events.isNotEmpty()) {
+                TextButton(onClick = {
+                    ConnectionEventLog.clear(context)
+                    events = emptyList()
+                }) { Text("Очистить журнал") }
+            }
+        }
+    }
+
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit, onDnsApps: () -> Unit) {
     val context = LocalContext.current
     val dnsSaving by vm.dnsSaving.collectAsState()
     var dnsMode by rememberSaveable { mutableStateOf(DnsMode.SYSTEM) }
     var customHost by rememberSaveable { mutableStateOf("") }
     var customPath by rememberSaveable { mutableStateOf("/dns-query") }
     var customSni by rememberSaveable { mutableStateOf("") }
+    var localDnsDomains by rememberSaveable { mutableStateOf("") }
     var selectedPresetName by rememberSaveable { mutableStateOf<String?>(null) }
     var status by rememberSaveable { mutableStateOf<String?>(null) }
     var statusError by rememberSaveable { mutableStateOf(false) }
+    var dnsTesting by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val presets = remember { dnsPresets }
 
     LaunchedEffect(Unit) {
@@ -398,6 +847,7 @@ private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit) {
         customHost = policy.dohServer
         customPath = policy.dohPath
         customSni = policy.dohSni.orEmpty()
+        localDnsDomains = policy.localDnsDomains.joinToString("\n")
         selectedPresetName = presets.firstOrNull { it.host == customHost && it.path == customPath }?.name
     }
 
@@ -448,6 +898,9 @@ private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit) {
             }
 
             if (dnsMode == DnsMode.DOH) {
+                Button(onClick = onDnsApps, modifier = Modifier.fillMaxWidth()) {
+                    Text("Приложения с системным DNS")
+                }
                 Text(stringResource(R.string.dns_presets_title), style = MaterialTheme.typography.labelLarge)
                 presets.forEach { preset ->
                     Button(
@@ -490,6 +943,14 @@ private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+                OutlinedTextField(
+                    value = localDnsDomains,
+                    onValueChange = { localDnsDomains = it },
+                    label = { Text("Локальные домены, по одному в строке") },
+                    supportingText = { Text("Эти домены будут разрешаться системным DNS") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             if (dnsSaving) {
@@ -512,12 +973,36 @@ private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit) {
                             host = customHost,
                             path = customPath,
                             sni = customSni,
+                            localDomains = localDnsDomains.lineSequence().toList(),
                         ) { result -> applyDnsResult(result) }
                     }
                 },
                 enabled = !dnsSaving,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.dns_save)) }
+            if (dnsMode == DnsMode.DOH) {
+                Button(
+                    onClick = {
+                        dnsTesting = true
+                        status = null
+                        scope.launch {
+                            vm.testDnsEndpoint(customHost).fold(
+                                onSuccess = { latency ->
+                                    statusError = false
+                                    status = "DNS-сервер доступен: $latency мс"
+                                },
+                                onFailure = {
+                                    statusError = true
+                                    status = "DNS-сервер недоступен"
+                                },
+                            )
+                            dnsTesting = false
+                        }
+                    },
+                    enabled = !dnsTesting && !dnsSaving && customHost.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (dnsTesting) "Проверка…" else "Проверить DNS-сервер") }
+            }
         }
     }
 }
@@ -572,6 +1057,8 @@ private fun ProfileEditRoute(
     var statusMessage by rememberSaveable(profileId) { mutableStateOf<String?>(null) }
     var statusIsError by rememberSaveable(profileId) { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable(profileId) { mutableStateOf(false) }
+    var testingServer by rememberSaveable(profileId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -655,6 +1142,27 @@ private fun ProfileEditRoute(
 
             Button(
                 onClick = {
+                    testingServer = true
+                    scope.launch {
+                        vm.testServerEndpoint(host, portText.toIntOrNull() ?: -1).fold(
+                            onSuccess = {
+                                statusIsError = false
+                                statusMessage = "Сервер доступен: $it мс. Проверка не подтверждает корректность UUID/TLS."
+                            },
+                            onFailure = {
+                                statusIsError = true
+                                statusMessage = "Сервер недоступен. Проверьте адрес и порт."
+                            },
+                        )
+                        testingServer = false
+                    }
+                },
+                enabled = !testingServer,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (testingServer) "Проверка…" else "Проверить сервер перед сохранением") }
+
+            Button(
+                onClick = {
                     val updated = profile.copy(
                         name = name,
                         host = host,
@@ -710,7 +1218,80 @@ private fun ProfileEditRoute(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun DnsAppsRoute(vm: AppViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val pm = context.packageManager
+    var apps by remember { mutableStateOf<List<InstalledAppEntry>>(emptyList()) }
+    val selected = remember { mutableStateMapOf<String, Boolean>() }
+    var search by rememberSaveable { mutableStateOf("") }
+    var loading by remember { mutableStateOf(true) }
+    var status by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val policy = vm.getTunnelPolicy()
+        apps = withContext(Dispatchers.IO) {
+            @Suppress("DEPRECATION")
+            pm.getInstalledApplications(0).map { info ->
+                InstalledAppEntry(
+                    info.packageName,
+                    runCatching { pm.getApplicationLabel(info).toString() }.getOrDefault(info.packageName),
+                    info.flags and ApplicationInfo.FLAG_SYSTEM != 0,
+                )
+            }.sortedBy { it.label.lowercase(Locale.getDefault()) }
+        }
+        apps.forEach { selected[it.packageName] = it.packageName in policy.systemDnsPackageNames }
+        loading = false
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Приложения с системным DNS") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
+                },
+            )
+        },
+    ) { padding ->
+        Column(Modifier.padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Для выбранных приложений DNS-запросы будут отправляться системному DNS, даже при включённом DoH.", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                label = { Text("Поиск по имени или пакету") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("Выбрано: ${selected.count { it.value }}")
+            Button(
+                onClick = {
+                    vm.saveSystemDnsApps(selected.filterValues { it }.keys.toList()) { result ->
+                        status = if (result.isSuccess) "Сохранено" else "Не удалось сохранить"
+                    }
+                },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Сохранить") }
+            status?.let { Text(it) }
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            LazyColumn {
+                items(apps.filter { it.label.contains(search, true) || it.packageName.contains(search, true) }, key = { it.packageName }) { app ->
+                    AppPickerRow(
+                        pm = pm,
+                        packageName = app.packageName,
+                        label = app.label,
+                        checked = selected[app.packageName] == true,
+                        onCheckedChange = { selected[app.packageName] = it },
+                    )
+                }
+            }
+
+        }
+    }
+}
+
 private fun stateLabel(s: VpnSessionState): String = when (s) {
     VpnSessionState.Disconnected -> "Отключено"
     VpnSessionState.Connecting -> "Подключение…"
@@ -839,6 +1420,10 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
 
     var splitMode by rememberSaveable { mutableStateOf(RoutingMode.PER_APP_ALLOWED) }
     var search by rememberSaveable { mutableStateOf("") }
+    var appFilter by rememberSaveable { mutableStateOf("all") }
+    var ruleSetName by rememberSaveable { mutableStateOf("") }
+    var ruleSets by remember { mutableStateOf(vm.routingRuleSets()) }
+    var showRuleSets by rememberSaveable { mutableStateOf(false) }
     val selected = remember { mutableStateMapOf<String, Boolean>() }
     var listReady by remember { mutableStateOf(false) }
     var initialMode by remember { mutableStateOf(RoutingMode.PER_APP_ALLOWED) }
@@ -863,16 +1448,17 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
         listReady = true
     }
 
-    val filtered = remember(apps, search) {
+    val filtered = apps.orEmpty().filter { app ->
         val q = search.trim().lowercase(Locale.getDefault())
-        val loadedApps = apps.orEmpty()
-        if (q.isEmpty()) loadedApps
-        else {
-            loadedApps.filter { app ->
-                app.packageName.lowercase(Locale.getDefault()).contains(q) ||
-                    app.label.lowercase(Locale.getDefault()).contains(q)
-            }
+        val matchesSearch = q.isEmpty() || app.packageName.lowercase(Locale.getDefault()).contains(q) ||
+            app.label.lowercase(Locale.getDefault()).contains(q)
+        val matchesFilter = when (appFilter) {
+            "user" -> !app.isSystem
+            "system" -> app.isSystem
+            "selected" -> selected[app.packageName] == true
+            else -> true
         }
+        matchesSearch && matchesFilter
     }
 
     val collator = remember { java.text.Collator.getInstance(Locale.getDefault()) }
@@ -978,6 +1564,66 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = appFilter == "all", onClick = { appFilter = "all" }, label = { Text("Все") })
+                    FilterChip(selected = appFilter == "user", onClick = { appFilter = "user" }, label = { Text("Пользовательские") })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = appFilter == "system", onClick = { appFilter = "system" }, label = { Text("Системные") })
+                    FilterChip(selected = appFilter == "selected", onClick = { appFilter = "selected" }, label = { Text("Выбранные") })
+                }
+                Text("Выбрано: ${selectedPackages.size}", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { showRuleSets = !showRuleSets }) {
+                    Text(if (showRuleSets) "Скрыть наборы правил" else "Наборы правил")
+                }
+                if (showRuleSets) {
+                    OutlinedTextField(
+                        value = ruleSetName,
+                        onValueChange = { ruleSetName = it },
+                        label = { Text("Имя набора") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(
+                        onClick = {
+                            vm.saveRoutingRuleSet(ruleSetName, splitMode, selectedPackages.toList())
+                            ruleSets = vm.routingRuleSets()
+                            ruleSetName = ""
+                        },
+                        enabled = ruleSetName.isNotBlank(),
+                    ) { Text("Сохранить текущий набор") }
+                    ruleSets.forEach { ruleSet ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                splitMode = ruleSet.mode
+                                selected.keys.toList().forEach { selected[it] = it in ruleSet.packages }
+                                saveMessage = "Набор применён. Нажмите «Сохранить»."
+                                saveError = false
+                            }) { Text(ruleSet.name) }
+                            TextButton(onClick = {
+                                vm.deleteRoutingRuleSet(ruleSet.name)
+                                ruleSets = vm.routingRuleSets()
+                            }) { Text("Удалить") }
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { filtered.forEach { selected[it.packageName] = true } }) {
+                        Text("Выбрать показанные")
+                    }
+                    TextButton(onClick = { selected.keys.toList().forEach { selected[it] = false } }) {
+                        Text("Снять все")
+                    }
+                }
+                val installedPackages = apps.orEmpty().mapTo(hashSetOf()) { it.packageName }
+                val removedCount = initialSelected.count { it !in installedPackages }
+                if (removedCount > 0) {
+                    Text(
+                        "Не установлено приложений из старого правила: $removedCount. После сохранения они будут удалены.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
             Button(
                 onClick = {

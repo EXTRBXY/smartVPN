@@ -124,6 +124,28 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
             DnsMode.DOH -> buildJsonObject {
                 put("final", JsonPrimitive("doh"))
                 put("reverse_mapping", JsonPrimitive(true))
+                if (policy.localDnsDomains.isNotEmpty() || policy.systemDnsPackageNames.isNotEmpty()) {
+                    put("rules", buildJsonArray {
+                        if (policy.localDnsDomains.isNotEmpty()) {
+                            add(buildJsonObject {
+                                put("domain_suffix", buildJsonArray {
+                                    policy.localDnsDomains.forEach { add(JsonPrimitive(it.trim().trimStart('.'))) }
+                                })
+                                put("action", JsonPrimitive("route"))
+                                put("server", JsonPrimitive("local"))
+                            })
+                        }
+                        if (policy.systemDnsPackageNames.isNotEmpty()) {
+                            add(buildJsonObject {
+                                put("package_name", buildJsonArray {
+                                    policy.systemDnsPackageNames.forEach { add(JsonPrimitive(it)) }
+                                })
+                                put("action", JsonPrimitive("route"))
+                                put("server", JsonPrimitive("local"))
+                            })
+                        }
+                    })
+                }
                 put("servers", buildJsonArray {
                     add(buildLocalDnsServer())
                     add(buildJsonObject {

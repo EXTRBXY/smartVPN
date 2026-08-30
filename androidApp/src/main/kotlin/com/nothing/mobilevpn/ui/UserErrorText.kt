@@ -15,6 +15,8 @@ object UserErrorText {
                 context.getString(R.string.user_error_policy_network_params)
             "invalid_doh_server", "invalid_doh_path" ->
                 context.getString(R.string.user_error_doh_params)
+            "invalid_local_dns_domain", "too_many_local_dns_domains" ->
+                "Проверьте список локальных DNS-доменов."
             "invalid_doh_sni_for_ip" ->
                 context.getString(R.string.user_error_doh_sni_for_ip)
             "vpn_connect_timeout" ->
@@ -55,8 +57,17 @@ object UserErrorText {
                 context.getString(R.string.user_error_profile_reality_incomplete)
             "profile_id_immutable" ->
                 context.getString(R.string.user_error_profile_id_immutable)
-            else ->
-                context.getString(R.string.user_error_generic)
+            else -> when {
+                code.contains("tls", true) || code.contains("certificate", true) || code.contains("reality", true) ->
+                    "Не удалось установить защищённое соединение. Проверьте TLS/Reality и время на устройстве."
+                code.contains("dns", true) || code.contains("resolve", true) ->
+                    "Не удалось разрешить адрес. Проверьте настройки DNS."
+                code.contains("timeout", true) || code.contains("connect", true) ->
+                    "Сервер не отвечает. Проверьте сеть, адрес и порт профиля."
+                code.contains("tun", true) ->
+                    "Android не смог создать VPN-туннель. Проверьте разрешение VPN и наличие другого VPN-приложения."
+                else -> context.getString(R.string.user_error_generic)
+            }
         }
     }
 }

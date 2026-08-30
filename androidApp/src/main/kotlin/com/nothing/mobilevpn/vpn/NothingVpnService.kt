@@ -24,6 +24,7 @@ import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilecore.libbox.MobilePlatformInterface
 import com.nothing.mobilecore.libbox.toAndroidIpPrefix
 import com.nothing.mobilecore.platform.AndroidSessionConfigWriter
+import com.nothing.mobilecore.platform.ConnectionEventLog
 import com.nothing.mobilecore.platform.SafeAndroidLog
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.infrastructure.LogRedaction
@@ -80,10 +81,15 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
+                if (intent.getBooleanExtra(EXTRA_USER_DISCONNECT, false)) {
+                    com.nothing.mobilecore.platform.AppPreferences(this).connectionRequested = false
+                }
+                ConnectionEventLog.add(this, "VPN service: disconnect")
                 requestStop(publishStopped = true, stopService = true)
                 return START_NOT_STICKY
             }
             ACTION_CONNECT -> {
+                ConnectionEventLog.add(this, "VPN service: connection started")
                 val configPath = intent.getStringExtra(EXTRA_CONFIG_PATH) ?: return START_NOT_STICKY
                 val policyJson = intent.getStringExtra(EXTRA_POLICY_JSON) ?: return START_NOT_STICKY
                 val policy = policyJsonFormat.decodeFromString(TunnelPolicy.serializer(), policyJson)
@@ -326,14 +332,15 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             o.autoRedirect = false
             when (policy.routingMode) {
                 RoutingMode.FULL_TUN -> {
-                    o.excludePackage = MobilePlatformInterface.StringArray(listOf(packageName).iterator())
+                    // No package filter: the app's own diagnostic requests also traverse the
+                    // tunnel. Core outbound sockets are protected in autoDetectInterfaceControl.
                 }
                 RoutingMode.PER_APP_ALLOWED -> {
                     val pkgs = (policy.allowedPackageNames + packageName).distinct()
                     o.includePackage = MobilePlatformInterface.StringArray(pkgs.iterator())
                 }
                 RoutingMode.PER_APP_EXCLUDED -> {
-                    val pkgs = (policy.allowedPackageNames + packageName).distinct()
+                    val pkgs = policy.allowedPackageNames.distinct()
                     o.excludePackage = MobilePlatformInterface.StringArray(pkgs.iterator())
                 }
             }
@@ -358,6 +365,10 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     }
 
     private fun sendConnectResult(ok: Boolean, message: String?) {
+        ConnectionEventLog.add(
+            this,
+            if (ok) "VPN service: tunnel ready" else "VPN service: start failed (${message ?: "unknown"})",
+        )
         VpnRunningState.publish(this, ok)
         sendBroadcast(
             Intent(VpnConnectResultContract.ACTION).apply {
@@ -407,7 +418,8 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         val disconnect = PendingIntent.getService(
             this,
             1,
-            Intent(this, NothingVpnService::class.java).setAction(ACTION_DISCONNECT),
+            Intent(this, NothingVpnService::class.java).setAction(ACTION_DISCONNECT)
+                .putExtra(EXTRA_USER_DISCONNECT, true),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, NothingVpnApp.CHANNEL_VPN)
@@ -504,6 +516,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
 
         const val ACTION_CONNECT = "com.nothing.mobilecore.action.CONNECT"
         const val ACTION_DISCONNECT = "com.nothing.mobilecore.action.DISCONNECT"
+        const val EXTRA_USER_DISCONNECT = "user_disconnect"
         const val EXTRA_CONFIG_PATH = "config_path"
         const val EXTRA_POLICY_JSON = "policy_json"
         private const val NOTIFICATION_ID = NothingVpnApp.NOTIFICATION_ID

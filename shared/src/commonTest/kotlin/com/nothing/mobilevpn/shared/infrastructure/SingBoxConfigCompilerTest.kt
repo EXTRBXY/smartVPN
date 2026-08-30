@@ -84,4 +84,19 @@ class SingBoxConfigCompilerTest {
         assertFalse(json.contains("\"domain_resolver\":\"local\"") || json.contains("\"domain_resolver\": \"local\""))
         assertTrue(json.contains("\"tag\":\"local\"") || json.contains("\"tag\": \"local\""))
     }
+
+    @Test
+    fun compile_routesLocalDomainsAndSelectedAppsToSystemDns() {
+        val splitDns = policy.copy(
+            dnsMode = DnsMode.DOH,
+            localDnsDomains = listOf("lan", "corp.example"),
+            systemDnsPackageNames = listOf("com.example.app"),
+        )
+        val json = SingBoxConfigCompiler().compile(profile, splitDns).getOrThrow()
+        assertTrue(json.contains("\"domain_suffix\":[\"lan\",\"corp.example\"]"))
+        assertTrue(json.contains("\"package_name\":[\"com.example.app\"]"))
+        assertTrue(json.contains("\"server\":\"local\""))
+        assertTrue(json.contains("\"final\":\"doh\""))
+        assertTrue(json.contains("hijack-dns"))
+    }
 }

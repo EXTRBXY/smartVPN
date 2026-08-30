@@ -100,7 +100,7 @@ class VpnSessionController(
                 lastFailure = attemptResult.exceptionOrNull()
                 runCatching { systemVpn.stopVpn() }
                 if (attempt < maxAttempts) {
-                    delay(300L * attempt)
+                    delay(1_000L shl (attempt - 1))
                 }
             }
             val msg = lastFailure?.message ?: "connect_failed"

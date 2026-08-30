@@ -101,6 +101,7 @@ class VpnQuickTileService : TileService() {
     @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun handleClick() {
         if (VpnRunningState.isRunning) {
+            (application as NothingVpnApp).automation.requestDisconnect("quick settings")
             setBusyTile(running = true)
             scope.launch(Dispatchers.Default) {
                 graph.sessionController.disconnectSuspend()
@@ -126,6 +127,7 @@ class VpnQuickTileService : TileService() {
             }
             return
         }
+        (application as NothingVpnApp).automation.requestConnect("quick settings")
         setBusyTile(running = false)
         scope.launch(Dispatchers.Default) {
             val activeId = graph.profileRepository.getActiveProfileId()
@@ -190,6 +192,10 @@ class VpnQuickTileService : TileService() {
                     R.string.qs_tile_subtitle_off
                 },
             )
+            if (running) {
+                val minutes = ((System.currentTimeMillis() - VpnRunningState.startedAt(this)) / 60_000).coerceAtLeast(0)
+                tile.subtitle = "${tile.subtitle} · $minutes мин"
+            }
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_vpn)
         tile.updateTile()

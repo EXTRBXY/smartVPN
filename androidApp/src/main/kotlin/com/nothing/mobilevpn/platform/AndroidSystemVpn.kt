@@ -21,6 +21,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlin.coroutines.resume
+import java.net.HttpURLConnection
+import java.net.URL
 
 class AndroidSystemVpn(private val context: Context) : SystemVpnPort {
 
@@ -127,6 +129,15 @@ class AndroidSystemVpn(private val context: Context) : SystemVpnPort {
                 withTimeout(7_000L) {
                     LibboxProxyProbe.test("proxy").getOrElse {
                         throw IllegalStateException("smoke_proxy_failed", it)
+                    }
+                    val probe = URL("https://www.gstatic.com/generate_204").openConnection() as HttpURLConnection
+                    try {
+                        probe.connectTimeout = 3_000
+                        probe.readTimeout = 3_000
+                        probe.instanceFollowRedirects = false
+                        if (probe.responseCode != 204) error("smoke_proxy_failed")
+                    } finally {
+                        probe.disconnect()
                     }
                     if (!VpnRunningState.readPersisted(context)) {
                         error("vpn_not_running_after_connect")

@@ -33,6 +33,9 @@ data class TunnelPolicy(
     val dohServer: String = "1.1.1.1",
     val dohPath: String = "/dns-query",
     val dohSni: String? = "cloudflare-dns.com",
+    /** Domain suffixes resolved by Android/local DNS instead of the encrypted resolver. */
+    val localDnsDomains: List<String> = emptyList(),
+    val systemDnsPackageNames: List<String> = emptyList(),
     /**
      * If true, a failed connection attempt is stopped immediately instead of being retried.
      * This is a retry policy, not an Android kill switch or lockdown-VPN setting.
@@ -71,4 +74,10 @@ fun TunnelPolicy.validate(): Result<Unit> = runCatching {
     val normalizedCount = allowedPackageNames.count { it.isNotBlank() }
     require(normalizedCount == allowedPackageNames.size) { "invalid_package_name" }
     require(normalizedCount <= 4096) { "too_many_packages" }
+    require(localDnsDomains.size <= 128) { "too_many_local_dns_domains" }
+    require(systemDnsPackageNames.size <= 4096 && systemDnsPackageNames.all { it.isNotBlank() }) { "invalid_package_name" }
+    require(localDnsDomains.all { domain ->
+        val value = domain.trim().trimStart('.')
+        value.isNotEmpty() && value.length <= 253 && dohHostRegex.matches(value)
+    }) { "invalid_local_dns_domain" }
 }

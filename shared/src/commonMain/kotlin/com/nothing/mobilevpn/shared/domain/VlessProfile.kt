@@ -22,4 +22,6 @@ data class VlessProfile(
     val wsHost: String? = null,
     val grpcServiceName: String? = null,
     val extraQuery: Map<String, String> = emptyMap(),
+    val favorite: Boolean = false,
+    val sortOrder: Int = 0,
 )

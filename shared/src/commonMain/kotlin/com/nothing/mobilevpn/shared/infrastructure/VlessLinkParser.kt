@@ -138,10 +138,14 @@ object VlessLinkParser {
                     i++
                 }
                 s[i] == '%' && i + 2 < s.length -> {
-                    val hex = s.substring(i + 1, i + 3).toIntOrNull(16)
-                    if (hex != null) {
-                        out.append(hex.toChar())
+                    val bytes = mutableListOf<Byte>()
+                    while (i + 2 < s.length && s[i] == '%') {
+                        val hex = s.substring(i + 1, i + 3).toIntOrNull(16) ?: break
+                        bytes.add(hex.toByte())
                         i += 3
+                    }
+                    if (bytes.isNotEmpty()) {
+                        out.append(bytes.toByteArray().decodeToString())
                     } else {
                         out.append(s[i])
                         i++

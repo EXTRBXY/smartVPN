@@ -16,12 +16,15 @@ class NothingVpnApp : Application() {
     private val appStartScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val graph by lazy { NothingVpnGraph(this) }
+    val automation by lazy { com.nothing.mobilecore.platform.VpnAutomationCoordinator(this, graph) }
 
     override fun onCreate() {
         super.onCreate()
         ProfileStorageMigration.startProfileStorageMigration(this, appStartScope)
         LibboxAndroidBootstrap.attachBase(this)
         LibboxAndroidBootstrap.ensureSetup()
+        automation.start()
+        graph.tunnelStatsMonitor.start()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(
                 CHANNEL_VPN,
