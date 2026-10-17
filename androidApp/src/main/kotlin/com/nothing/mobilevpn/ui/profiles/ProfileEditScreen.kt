@@ -1,5 +1,6 @@
 package com.nothing.mobilecore.ui.profiles
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,12 +53,12 @@ internal fun ProfileEditRoute(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Редактирование профиля") },
+                    title = { Text(stringResource(R.string.profile_edit_title)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Назад",
+                                contentDescription = stringResource(R.string.action_back),
                             )
                         }
                     },
@@ -94,12 +95,12 @@ internal fun ProfileEditRoute(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Редактирование профиля") },
+                title = { Text(stringResource(R.string.profile_edit_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад",
+                            contentDescription = stringResource(R.string.action_back),
                         )
                     }
                 },
@@ -117,7 +118,7 @@ internal fun ProfileEditRoute(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Имя профиля") },
+                label = { Text(stringResource(R.string.profile_name)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
@@ -181,11 +182,11 @@ internal fun ProfileEditRoute(
                         vm.testServerEndpoint(host, portText.toIntOrNull() ?: -1).fold(
                             onSuccess = {
                                 statusIsError = false
-                                statusMessage = "Сервер доступен: $it мс. Проверка не подтверждает корректность UUID/TLS."
+                                statusMessage = context.getString(R.string.profile_server_reachable, it)
                             },
                             onFailure = {
                                 statusIsError = true
-                                statusMessage = "Сервер недоступен. Проверьте адрес и порт."
+                                statusMessage = context.getString(R.string.profile_server_unreachable)
                             },
                         )
                         testingServer = false
@@ -193,7 +194,7 @@ internal fun ProfileEditRoute(
                 },
                 enabled = !testingServer,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (testingServer) "Проверка…" else "Проверить сервер перед сохранением") }
+            ) { Text(if (testingServer) stringResource(R.string.status_checking) else stringResource(R.string.profile_check_server)) }
 
             Button(
                 onClick = {
@@ -218,20 +219,20 @@ internal fun ProfileEditRoute(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Сохранить") }
+            ) { Text(stringResource(R.string.action_save)) }
 
             Button(
                 onClick = { showDeleteDialog = true },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Удалить профиль") }
+            ) { Text(stringResource(R.string.profile_delete)) }
         }
     }
 
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Удаление профиля") },
-            text = { Text("Удалить этот профиль? Действие необратимо.") },
+            title = { Text(stringResource(R.string.profile_delete_title)) },
+            text = { Text(stringResource(R.string.profile_delete_text)) },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteDialog = false
@@ -243,10 +244,10 @@ internal fun ProfileEditRoute(
                             statusMessage = UserErrorText.from(context, result.exceptionOrNull())
                         }
                     }
-                }) { Text("Удалить") }
+                }) { Text(stringResource(R.string.action_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Отмена") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }

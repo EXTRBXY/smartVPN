@@ -1,5 +1,7 @@
 package com.nothing.mobilecore.ui.dns
 
+import androidx.compose.ui.res.stringResource
+import com.nothing.mobilecore.R
 import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -66,32 +68,32 @@ internal fun DnsAppsRoute(vm: DnsViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Приложения с системным DNS") },
+                title = { Text(stringResource(R.string.dns_apps_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) }
                 },
             )
         },
     ) { padding ->
         Column(Modifier.padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Для выбранных приложений DNS-запросы будут отправляться системному DNS, даже при включённом DoH.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.dns_apps_hint), style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
-                label = { Text("Поиск по имени или пакету") },
+                label = { Text(stringResource(R.string.apps_search_hint)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text("Выбрано: ${selected.count { it.value }}")
+            Text(stringResource(R.string.apps_selected_count, selected.count { it.value }))
             Button(
                 onClick = {
                     vm.saveSystemDnsApps(selected.filterValues { it }.keys.toList()) { result ->
-                        status = if (result.isSuccess) "Сохранено" else "Не удалось сохранить"
+                        status = if (result.isSuccess) context.getString(R.string.status_saved) else context.getString(R.string.status_save_failed)
                     }
                 },
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Сохранить") }
+            ) { Text(stringResource(R.string.action_save)) }
             status?.let { Text(it) }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             LazyColumn {

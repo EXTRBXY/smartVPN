@@ -65,10 +65,12 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 ### 14. Проверки доступности вводят в заблуждение
 «Задержка» — TCP connect, не проверка VLESS/Reality; DNS-проверка — TCP на 443. В UI это подано как проверка, документация (README) это признаёт. Можно использовать `urlTest` ядра для активного профиля.
 
-### 15. Тестовое покрытие
+### 15. Тестовое покрытие — частично
+Добавлены: `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`, `ProfileServiceTest`, `StorageCompatibilityTest`, `VpnErrorTest`. Остаток ниже. Исходное описание:
 Отсутствуют тесты: `NothingVpnService`, libbox-мост, `VpnAutomationCoordinator`, большинства ViewModel (есть `DnsViewModelTest`), UI (Compose), миграция. Единственный интеграционный набор — инструментальный и запускается на эмуляторе в CI. Начать с выноса логики решений (`maybeConnect`, `ProfileSecretIntegrity`-подобные) в чистые функции.
 
-### 16. Локализация
+### 16. ~~Локализация~~ — сделано (кроме английской локали)
+Все 162 строки UI вынесены в `strings.xml`. Исходное описание:
 Русские строки смешаны: часть в `strings.xml`, большая часть захардкожена в `MainActivity`, `UserErrorText`, `VpnQuickTileService` (напр., «Отключение…», « · N мин»). Нет английской локали. Вынести всё в ресурсы.
 
 ## P3

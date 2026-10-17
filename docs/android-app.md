@@ -13,7 +13,7 @@
 | `BootCompletedReceiver` | `exported=true`, `BOOT_COMPLETED` и `MY_PACKAGE_REPLACED` |
 | `VpnQuickTileService` | `exported=true`, `BIND_QUICK_SETTINGS_TILE`, `QS_TILE` |
 
-Строки (русские) — `res/values/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Многие тексты экранов в `ui/` всё ещё захардкожены, а не вынесены в ресурсы.
+Строки (русские) — `res/values/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Все тексты интерфейса — в `strings.xml` (в коде `stringResource` в composable и `context.getString` в колбэках); захардкоженных русских строк в Kotlin нет. Английской локали пока нет.
 
 ## Пакет `vpn/` — системный VPN
 
@@ -103,8 +103,8 @@ ViewModel не делают сетевых запросов и не трогаю
 `UserErrorText` — исчерпывающий перевод `VpnError` в строки `strings.xml` (см. [glossary.md](glossary.md)); классификация исключений — в `shared` (`toVpnError`).
 
 ## Тесты androidApp
-- `src/test`: `ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest` (JVM).
-- `src/androidTest`: `VpnLifecycleInstrumentationTest` (сброс running-флага при disconnect, константы action, `stopVpnAndAwait` в остановленном состоянии, замена секрета при upsert).
+- `src/test` (JVM): `ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest`, `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`.
+- `src/androidTest`: `VpnLifecycleInstrumentationTest` (начальный статус туннеля, удаление старого running-флага, константы action, `stopVpnAndAwait` в остановленном состоянии, замена секрета при upsert).
 
 ## Сборка/ProGuard
 `proguard-rules.pro` сохраняет `io.nekohasekai.libbox.**`, native-методы, сериализаторы и `shared.domain/application`. `packaging.jniLibs.useLegacyPackaging = true`.

@@ -1,5 +1,6 @@
 package com.nothing.mobilecore.ui.apps
 
+import androidx.compose.ui.res.stringResource
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -142,7 +143,7 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
     val saveValidationError by remember(splitMode, selectedPackages) {
         derivedStateOf {
             if (splitMode == RoutingMode.PER_APP_ALLOWED && selectedPackages.isEmpty()) {
-                "Выберите хотя бы одно приложение для режима \"только выбранные\"."
+                context.getString(R.string.apps_error_none_selected)
             } else {
                 null
             }
@@ -179,12 +180,12 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Раздельная маршрутизация") },
+                title = { Text(stringResource(R.string.apps_title)) },
                 navigationIcon = {
                     IconButton(onClick = requestBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад",
+                            contentDescription = stringResource(R.string.action_back),
                         )
                     }
                 },
@@ -204,20 +205,20 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                     FilterChip(
                         selected = splitMode == RoutingMode.PER_APP_ALLOWED,
                         onClick = { splitMode = RoutingMode.PER_APP_ALLOWED },
-                        label = { Text("В VPN только выбранные") },
+                        label = { Text(stringResource(R.string.apps_mode_allowed)) },
                     )
                     FilterChip(
                         selected = splitMode == RoutingMode.PER_APP_EXCLUDED,
                         onClick = { splitMode = RoutingMode.PER_APP_EXCLUDED },
-                        label = { Text("В обход только выбранные") },
+                        label = { Text(stringResource(R.string.apps_mode_excluded)) },
                     )
                 }
                 Text(
                     when (splitMode) {
                         RoutingMode.PER_APP_ALLOWED ->
-                            "Отмеченные приложения идут через VPN, остальной трафик — мимо туннеля."
+                            stringResource(R.string.apps_mode_allowed_hint)
                         RoutingMode.PER_APP_EXCLUDED ->
-                            "Отмеченные приложения идут мимо VPN, всё остальное — через туннель."
+                            stringResource(R.string.apps_mode_excluded_hint)
                         RoutingMode.FULL_TUN -> ""
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -229,27 +230,27 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                         search = it
                         saveMessage = null
                     },
-                    label = { Text("Поиск по имени или пакету") },
+                    label = { Text(stringResource(R.string.apps_search_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = appFilter == "all", onClick = { appFilter = "all" }, label = { Text("Все") })
-                    FilterChip(selected = appFilter == "user", onClick = { appFilter = "user" }, label = { Text("Пользовательские") })
+                    FilterChip(selected = appFilter == "all", onClick = { appFilter = "all" }, label = { Text(stringResource(R.string.apps_filter_all)) })
+                    FilterChip(selected = appFilter == "user", onClick = { appFilter = "user" }, label = { Text(stringResource(R.string.apps_filter_user)) })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = appFilter == "system", onClick = { appFilter = "system" }, label = { Text("Системные") })
-                    FilterChip(selected = appFilter == "selected", onClick = { appFilter = "selected" }, label = { Text("Выбранные") })
+                    FilterChip(selected = appFilter == "system", onClick = { appFilter = "system" }, label = { Text(stringResource(R.string.apps_filter_system)) })
+                    FilterChip(selected = appFilter == "selected", onClick = { appFilter = "selected" }, label = { Text(stringResource(R.string.apps_filter_selected)) })
                 }
-                Text("Выбрано: ${selectedPackages.size}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.apps_selected_count, selectedPackages.size), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { showRuleSets = !showRuleSets }) {
-                    Text(if (showRuleSets) "Скрыть наборы правил" else "Наборы правил")
+                    Text(if (showRuleSets) stringResource(R.string.apps_rule_sets_hide) else stringResource(R.string.apps_rule_sets_show))
                 }
                 if (showRuleSets) {
                     OutlinedTextField(
                         value = ruleSetName,
                         onValueChange = { ruleSetName = it },
-                        label = { Text("Имя набора") },
+                        label = { Text(stringResource(R.string.apps_rule_set_name)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -260,35 +261,35 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                             ruleSetName = ""
                         },
                         enabled = ruleSetName.isNotBlank(),
-                    ) { Text("Сохранить текущий набор") }
+                    ) { Text(stringResource(R.string.apps_rule_set_save)) }
                     ruleSets.forEach { ruleSet ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = {
                                 splitMode = ruleSet.mode
                                 selected.keys.toList().forEach { selected[it] = it in ruleSet.packages }
-                                saveMessage = "Набор применён. Нажмите «Сохранить»."
+                                saveMessage = context.getString(R.string.apps_rule_set_applied)
                                 saveError = false
                             }) { Text(ruleSet.name) }
                             TextButton(onClick = {
                                 vm.deleteRoutingRuleSet(ruleSet.name)
                                 ruleSets = vm.routingRuleSets()
-                            }) { Text("Удалить") }
+                            }) { Text(stringResource(R.string.action_delete)) }
                         }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { filtered.forEach { selected[it.packageName] = true } }) {
-                        Text("Выбрать показанные")
+                        Text(stringResource(R.string.apps_select_visible))
                     }
                     TextButton(onClick = { selected.keys.toList().forEach { selected[it] = false } }) {
-                        Text("Снять все")
+                        Text(stringResource(R.string.apps_clear_all))
                     }
                 }
                 val installedPackages = apps.orEmpty().mapTo(hashSetOf()) { it.packageName }
                 val removedCount = initialSelected.count { it !in installedPackages }
                 if (removedCount > 0) {
                     Text(
-                        "Не установлено приложений из старого правила: $removedCount. После сохранения они будут удалены.",
+                        stringResource(R.string.apps_missing_from_rule, removedCount),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -317,7 +318,7 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 enabled = !splitTunnelSaving,
-            ) { Text("Сохранить") }
+            ) { Text(stringResource(R.string.action_save)) }
             saveMessage?.let {
                 Text(
                     text = it,
@@ -344,7 +345,7 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                     if (chosenApps.isNotEmpty()) {
                         item(key = "header_chosen") {
                             Text(
-                                "Выбранные",
+                                stringResource(R.string.apps_filter_selected),
                                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
@@ -358,7 +359,7 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                             AppPickerRow(
                                 pm = pm,
                                 packageName = app.packageName,
-                                label = if (app.isSystem) "${app.label} · системное" else app.label,
+                                label = if (app.isSystem) context.getString(R.string.apps_system_app_label, app.label) else app.label,
                                 checked = true,
                                 onCheckedChange = { selected[app.packageName] = it },
                             )
@@ -372,7 +373,7 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                     if (otherApps.isNotEmpty()) {
                         item(key = "header_rest") {
                             Text(
-                                if (chosenApps.isNotEmpty()) "Остальные" else "Все приложения",
+                                if (chosenApps.isNotEmpty()) stringResource(R.string.apps_section_rest) else stringResource(R.string.apps_section_all),
                                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -386,7 +387,7 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
                             AppPickerRow(
                                 pm = pm,
                                 packageName = app.packageName,
-                                label = if (app.isSystem) "${app.label} · системное" else app.label,
+                                label = if (app.isSystem) context.getString(R.string.apps_system_app_label, app.label) else app.label,
                                 checked = false,
                                 onCheckedChange = { selected[app.packageName] = it },
                             )
@@ -400,18 +401,18 @@ internal fun AppsRoute(vm: SplitTunnelViewModel, onBack: () -> Unit) {
     if (showUnsavedDialog) {
         AlertDialog(
             onDismissRequest = { showUnsavedDialog = false },
-            title = { Text("Есть несохранённые изменения") },
-            text = { Text("Выйти без сохранения?") },
+            title = { Text(stringResource(R.string.apps_unsaved_title)) },
+            text = { Text(stringResource(R.string.apps_unsaved_text)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showUnsavedDialog = false
                         onBack()
                     },
-                ) { Text("Выйти") }
+                ) { Text(stringResource(R.string.action_leave)) }
             },
             dismissButton = {
-                TextButton(onClick = { showUnsavedDialog = false }) { Text("Остаться") }
+                TextButton(onClick = { showUnsavedDialog = false }) { Text(stringResource(R.string.action_stay)) }
             },
         )
     }

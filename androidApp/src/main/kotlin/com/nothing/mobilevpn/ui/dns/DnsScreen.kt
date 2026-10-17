@@ -97,7 +97,7 @@ internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Uni
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад",
+                            contentDescription = stringResource(R.string.action_back),
                         )
                     }
                 },
@@ -128,7 +128,7 @@ internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Uni
 
             if (dnsMode == DnsMode.DOH) {
                 Button(onClick = onDnsApps, modifier = Modifier.fillMaxWidth()) {
-                    Text("Приложения с системным DNS")
+                    Text(stringResource(R.string.dns_apps_title))
                 }
                 Text(stringResource(R.string.dns_presets_title), style = MaterialTheme.typography.labelLarge)
                 presets.forEach { preset ->
@@ -175,8 +175,8 @@ internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Uni
                 OutlinedTextField(
                     value = localDnsDomains,
                     onValueChange = { localDnsDomains = it },
-                    label = { Text("Локальные домены, по одному в строке") },
-                    supportingText = { Text("Эти домены будут разрешаться системным DNS") },
+                    label = { Text(stringResource(R.string.dns_local_domains_label)) },
+                    supportingText = { Text(stringResource(R.string.dns_local_domains_hint)) },
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -218,11 +218,11 @@ internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Uni
                             vm.testDnsEndpoint(customHost).fold(
                                 onSuccess = { latency ->
                                     statusError = false
-                                    status = "DNS-сервер доступен: $latency мс"
+                                    status = context.getString(R.string.dns_server_reachable, latency)
                                 },
                                 onFailure = {
                                     statusError = true
-                                    status = "DNS-сервер недоступен"
+                                    status = context.getString(R.string.dns_server_unreachable)
                                 },
                             )
                             dnsTesting = false
@@ -230,7 +230,7 @@ internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Uni
                     },
                     enabled = !dnsTesting && !dnsSaving && customHost.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (dnsTesting) "Проверка…" else "Проверить DNS-сервер") }
+                ) { Text(if (dnsTesting) stringResource(R.string.status_checking) else stringResource(R.string.dns_check_server)) }
             }
         }
     }

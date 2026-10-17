@@ -1,5 +1,7 @@
 package com.nothing.mobilecore.ui.diagnostics
 
+import androidx.compose.ui.res.stringResource
+import com.nothing.mobilecore.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -56,13 +58,13 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
         buildString {
             appendLine("Nothing Mobile ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT}")
-            appendLine("Устройство: ${Build.MANUFACTURER} ${Build.MODEL}")
-            appendLine("VPN: ${stateLabel(state)}")
-            appendLine("Сеть: ${currentNetworkLabel(context)}")
-            appendLine("Разрешение VPN: ${if (VpnService.prepare(context) == null) "предоставлено" else "не предоставлено"}")
-            appendLine("Трафик: down=${stats.downloadTotal}, up=${stats.uploadTotal}, connections=${stats.activeConnections}")
-            appendLine("Внешний IP: ${externalIp ?: "не проверялся"}")
-            appendLine("События:")
+            appendLine(context.getString(R.string.diag_report_device, Build.MANUFACTURER, Build.MODEL))
+            appendLine("VPN: ${stateLabel(context, state)}")
+            appendLine(context.getString(R.string.diag_report_network, currentNetworkLabel(context)))
+            appendLine(context.getString(R.string.diag_report_vpn_permission, context.getString(if (VpnService.prepare(context) == null) R.string.diag_permission_granted else R.string.diag_permission_missing)))
+            appendLine(context.getString(R.string.diag_report_traffic, stats.downloadTotal, stats.uploadTotal, stats.activeConnections))
+            appendLine(context.getString(R.string.diag_external_ip, externalIp ?: context.getString(R.string.diag_external_ip_unchecked)))
+            appendLine(context.getString(R.string.diag_report_events))
             events.forEach { appendLine(it) }
         }
     }
@@ -70,10 +72,10 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Диагностика") },
+                title = { Text(stringResource(R.string.diag_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
             )
@@ -87,31 +89,31 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Состояние: ${stateLabel(state)}")
-            Text("Версия: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            Text(stringResource(R.string.diag_state, stateLabel(context, state)))
+            Text(stringResource(R.string.diag_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
             Text("Android ${Build.VERSION.RELEASE} · ${Build.MANUFACTURER} ${Build.MODEL}")
-            Text("Внешний IP: ${externalIp ?: "не проверялся"}")
+            Text(stringResource(R.string.diag_external_ip, externalIp ?: stringResource(R.string.diag_external_ip_unchecked)))
             Button(
                 onClick = {
                     ipLoading = true
                     scope.launch {
-                        externalIp = vm.externalIp().getOrElse { "не удалось определить" }
+                        externalIp = vm.externalIp().getOrElse { context.getString(R.string.diag_external_ip_failed) }
                         ipLoading = false
                     }
                 },
                 enabled = !ipLoading,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (ipLoading) "Проверка…" else "Проверить внешний IP") }
-            Text("Секреты, UUID и содержимое профилей в отчёт не включаются.", style = MaterialTheme.typography.bodySmall)
+            ) { Text(if (ipLoading) stringResource(R.string.status_checking) else stringResource(R.string.diag_check_external_ip)) }
+            Text(stringResource(R.string.diag_report_privacy), style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
                         val clipboard = context.getSystemService(ClipboardManager::class.java)
                         clipboard.setPrimaryClip(ClipData.newPlainText("Nothing Mobile diagnostics", report))
-                        Toast.makeText(context, "Отчёт скопирован", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.diag_report_copied), Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.weight(1f),
-                ) { Text("Копировать") }
+                ) { Text(stringResource(R.string.action_copy)) }
                 Button(
                     onClick = {
                         context.startActivity(
@@ -120,22 +122,22 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, report)
                                 },
-                                "Передать отчёт",
+                                context.getString(R.string.diag_share_report),
                             ),
                         )
                     },
                     modifier = Modifier.weight(1f),
-                ) { Text("Поделиться") }
+                ) { Text(stringResource(R.string.action_share)) }
             }
             HorizontalDivider()
-            Text("Последние события", style = MaterialTheme.typography.labelLarge)
-            if (events.isEmpty()) Text("Событий пока нет", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.diag_recent_events), style = MaterialTheme.typography.labelLarge)
+            if (events.isEmpty()) Text(stringResource(R.string.diag_no_events), style = MaterialTheme.typography.bodySmall)
             events.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
             if (events.isNotEmpty()) {
                 TextButton(onClick = {
                     vm.clearEvents()
                     events = emptyList()
-                }) { Text("Очистить журнал") }
+                }) { Text(stringResource(R.string.diag_clear_log)) }
             }
         }
     }

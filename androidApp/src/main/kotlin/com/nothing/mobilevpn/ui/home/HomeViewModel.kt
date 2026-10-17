@@ -123,11 +123,12 @@ class HomeViewModel(
         VlessLinkFormatter.format(findProfile(profileId))
     }
 
-    fun duplicateProfile(profileId: String, onResult: (Result<Unit>) -> Unit) {
+    /** [copyName] строит имя копии из имени исходного профиля (текст — из ресурсов UI). */
+    fun duplicateProfile(profileId: String, copyName: (String) -> String, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch {
             onResult(runCatching {
                 val profile = findProfile(profileId)
-                profiles.upsert(profile.copy(id = UUID.randomUUID().toString(), name = "${profile.name} — копия", favorite = false))
+                profiles.upsert(profile.copy(id = UUID.randomUUID().toString(), name = copyName(profile.name), favorite = false))
             })
         }
     }

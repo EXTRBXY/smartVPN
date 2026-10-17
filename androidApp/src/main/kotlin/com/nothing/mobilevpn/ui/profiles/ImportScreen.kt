@@ -1,5 +1,6 @@
 package com.nothing.mobilecore.ui.profiles
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,20 +43,20 @@ internal fun ImportRoute(vm: ImportViewModel, onBack: () -> Unit) {
     val importInProgress by vm.importInProgress.collectAsState()
     val normalizedLink = link.trim()
     val inputError = when {
-        normalizedLink.isEmpty() -> "Вставьте ссылку vless://"
-        !normalizedLink.startsWith("vless://", ignoreCase = true) -> "Поддерживаются только ссылки vless://"
+        normalizedLink.isEmpty() -> context.getString(R.string.import_hint_empty)
+        !normalizedLink.startsWith("vless://", ignoreCase = true) -> context.getString(R.string.user_error_only_vless)
         else -> null
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Импорт ссылки") },
+                title = { Text(stringResource(R.string.import_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад",
+                            contentDescription = stringResource(R.string.action_back),
                         )
                     }
                 },
@@ -107,7 +108,7 @@ internal fun ImportRoute(vm: ImportViewModel, onBack: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !importInProgress && inputError == null,
-            ) { Text("Импортировать") }
+            ) { Text(stringResource(R.string.import_action)) }
         }
     }
 }

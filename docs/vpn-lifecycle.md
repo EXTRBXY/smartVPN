@@ -87,7 +87,7 @@ UI: vm.connect()                       (connectionRequested = true)
 | Недоверенный Wi-Fi | `connectOnUntrustedWifi`, текущий SSID известен (нужен `ACCESS_FINE_LOCATION`) и не в `trustedWifiNames`; для доверенного SSID — не подключаться |
 | Health-монитор (раз в 60 с) | `periodicHealthCheck` и VPN запущен: `smokeCheck`; после 2 подряд сбоев при `autoReconnect && connectionRequested` → `disconnectSuspend` → пауза 1 с → `maybeConnect` |
 
-`maybeConnect` под своим `Mutex`; пропускает, если туннель `Running`/`Starting`, нужно разрешение VPN, либо контроллер в `Connecting/Recovering/Connected`. Все решения пишутся в `ConnectionEventLog`.
+`maybeConnect` под своим `Mutex` собирает входные данные и зовёт чистую функцию `decideAutoConnect` (`platform/AutomationDecisions.kt`, покрыта `AutomationDecisionsTest`): пропуск, если доверенный Wi-Fi, подключение не запрошено, туннель `Running`/`Starting` или контроллер занят, нет разрешения VPN; флаг «VPN нужен» для недоверенного Wi-Fi ставится и при пропуске. Порог перезапуска по health-check — `shouldRestartAfterHealthFailures`. Решения и ошибки (кодом `VpnError`) пишутся в `ConnectionEventLog`.
 
 ## Что значит «Kill Switch»
 

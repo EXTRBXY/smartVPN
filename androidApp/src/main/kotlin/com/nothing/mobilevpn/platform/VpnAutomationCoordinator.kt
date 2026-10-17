@@ -5,8 +5,8 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import com.nothing.mobilecore.shared.domain.VpnSessionState
 import com.nothing.mobilecore.shared.domain.TunnelStatus
+import com.nothing.mobilecore.shared.domain.toVpnError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,24 +66,29 @@ class VpnAutomationCoordinator(
     fun currentWifiName(): String? = graph.wifiInfo.currentSsid()
 
     private suspend fun maybeConnect(reason: String, fromBoot: Boolean = false): Unit = connectMutex.withLock {
-        val settings = preferences.automation()
-        val requestedReconnect = (settings.autoReconnect || fromBoot) && preferences.connectionRequested
-        val wifi = currentWifiName()
-        if (settings.connectOnUntrustedWifi && wifi != null && wifi in settings.trustedWifiNames) return
-        val untrustedWifi = settings.connectOnUntrustedWifi && wifi != null && wifi !in settings.trustedWifiNames
-        if (!requestedReconnect && !untrustedWifi) return
-        if (untrustedWifi) preferences.connectionRequested = true
-        val tunnel = graph.tunnelStatus.status.value
-        if (tunnel is TunnelStatus.Running || tunnel is TunnelStatus.Starting) return
-        if (graph.systemVpn.vpnPermissionNeeded()) {
-            ConnectionEventLog.add(app, "Automatic connection skipped: VPN permission required")
-            return
+        val decision = decideAutoConnect(
+            AutoConnectInput(
+                settings = preferences.automation(),
+                connectionRequested = preferences.connectionRequested,
+                fromBoot = fromBoot,
+                wifiSsid = currentWifiName(),
+                tunnel = graph.tunnelStatus.status.value,
+                session = graph.sessionController.state.value,
+                vpnPermissionNeeded = graph.systemVpn.vpnPermissionNeeded(),
+            ),
+        )
+        if (decision.markRequested) preferences.connectionRequested = true
+        when (decision.skip) {
+            null -> Unit
+            SkipReason.VPN_PERMISSION_REQUIRED -> {
+                ConnectionEventLog.add(app, "Automatic connection skipped: VPN permission required")
+                return
+            }
+            else -> return
         }
-        val state = graph.sessionController.state.value
-        if (state is VpnSessionState.Connecting || state is VpnSessionState.Recovering || state is VpnSessionState.Connected) return
         ConnectionEventLog.add(app, "Automatic connection: $reason")
         graph.sessionController.connectSuspend().onFailure {
-            ConnectionEventLog.add(app, "Automatic connection failed: ${it.message ?: it.javaClass.simpleName}")
+            ConnectionEventLog.add(app, "Automatic connection failed: ${it.toVpnError().code}")
         }
         Unit
     }
@@ -105,8 +110,8 @@ class VpnAutomationCoordinator(
                     consecutiveFailures = 0
                 } else {
                     consecutiveFailures++
-                    ConnectionEventLog.add(app, "Health check failed ($consecutiveFailures): ${result.exceptionOrNull()?.message}")
-                    if (consecutiveFailures >= 2 && settings.autoReconnect && preferences.connectionRequested) {
+                    ConnectionEventLog.add(app, "Health check failed ($consecutiveFailures): ${result.exceptionOrNull()?.toVpnError()?.code}")
+                    if (shouldRestartAfterHealthFailures(consecutiveFailures, settings, preferences.connectionRequested)) {
                         consecutiveFailures = 0
                         ConnectionEventLog.add(app, "Restarting tunnel after health-check failures")
                         graph.sessionController.disconnectSuspend()

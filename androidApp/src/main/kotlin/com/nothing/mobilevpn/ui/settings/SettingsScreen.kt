@@ -1,5 +1,7 @@
 package com.nothing.mobilecore.ui.settings
 
+import androidx.compose.ui.res.stringResource
+import com.nothing.mobilecore.R
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -54,10 +56,10 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Настройки") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
             )
@@ -71,15 +73,15 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SettingSwitch("Подключаться после перезагрузки", autoStart) {
+            SettingSwitch(stringResource(R.string.settings_auto_start), autoStart) {
                 autoStart = it
                 vm.setAutoStart(it)
             }
-            SettingSwitch("Восстанавливать соединение", autoReconnect) {
+            SettingSwitch(stringResource(R.string.settings_auto_reconnect), autoReconnect) {
                 autoReconnect = it
                 vm.setAutoReconnect(it)
             }
-            SettingSwitch("Подключаться в недоверенных Wi‑Fi", untrustedWifi) {
+            SettingSwitch(stringResource(R.string.settings_untrusted_wifi), untrustedWifi) {
                 untrustedWifi = it
                 vm.setConnectOnUntrustedWifi(it)
                 if (it && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -89,36 +91,36 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
                     )
                 }
             }
-            SettingSwitch("Периодически проверять туннель", healthCheck) {
+            SettingSwitch(stringResource(R.string.settings_health_check), healthCheck) {
                 healthCheck = it
                 vm.setPeriodicHealthCheck(it)
             }
 
-            Text("Доверенные Wi‑Fi", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.settings_trusted_wifi), style = MaterialTheme.typography.labelLarge)
             Text(
-                currentWifi?.let { "Текущая сеть: $it" }
-                    ?: "Имя текущей сети недоступно — проверьте разрешение геолокации.",
+                currentWifi?.let { context.getString(R.string.settings_current_wifi, it) }
+                    ?: context.getString(R.string.settings_current_wifi_unknown),
                 style = MaterialTheme.typography.bodySmall,
             )
             OutlinedTextField(
                 value = trustedWifi,
                 onValueChange = { trustedWifi = it },
-                label = { Text("По одному имени сети в строке") },
+                label = { Text(stringResource(R.string.settings_trusted_wifi_hint)) },
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth(),
             )
             Button(
                 onClick = {
                     vm.setTrustedWifiNames(trustedWifi.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toSet())
-                    Toast.makeText(context, "Список сохранён", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.settings_trusted_saved), Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Сохранить доверенные сети") }
+            ) { Text(stringResource(R.string.settings_trusted_save)) }
 
             HorizontalDivider()
             Text("Kill Switch", style = MaterialTheme.typography.labelLarge)
             Text(
-                "Строгую блокировку трафика включает Android: выберите Nothing Mobile как постоянный VPN и включите блокировку соединений без VPN.",
+                stringResource(R.string.settings_kill_switch_hint),
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(
@@ -127,7 +129,7 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
                         .onFailure { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Открыть системные настройки VPN") }
+            ) { Text(stringResource(R.string.settings_open_vpn)) }
         }
     }
 }
