@@ -40,7 +40,8 @@ UI: vm.connect()                       (connectionRequested = true)
      │              ├─ проверка NeedWIFIState ↔ ACCESS_FINE_LOCATION
      │              └─ publish Running(sessionId, now)   (ошибка → Stopped(sessionId, код))
      ├─ AndroidSystemVpn.smokeCheck                              [IO, таймаут 7 с]
-     │    urlTest("proxy") + GET gstatic generate_204 + TunnelStatus.Running
+     │    urlTest("proxy") + GET gstatic generate_204 (без keep-alive, до 4 попыток
+     │    при сетевой ошибке: сразу после Running первый сокет получает RST) + TunnelStatus.Running
      └─ state = Connected (с перепроверкой, что туннель всё ещё Running)
 ```
 

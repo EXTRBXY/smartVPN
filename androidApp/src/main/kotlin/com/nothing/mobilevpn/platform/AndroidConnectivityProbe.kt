@@ -29,6 +29,9 @@ class AndroidConnectivityProbe : ConnectivityProbePort {
                 connection.connectTimeout = HTTP_TIMEOUT_MS
                 connection.readTimeout = HTTP_TIMEOUT_MS
                 connection.setRequestProperty("Accept", "text/plain")
+                // Без keep-alive: соединение из пула могло быть открыто через уже закрытый туннель.
+                connection.useCaches = false
+                connection.setRequestProperty("Connection", "close")
                 ensure(connection.responseCode in 200..299) { VpnError.ExternalIpFailed }
                 connection.inputStream.bufferedReader().use { it.readText().trim() }
                     .also { ip -> ensure(ip.length in 3..64) { VpnError.ExternalIpFailed } }

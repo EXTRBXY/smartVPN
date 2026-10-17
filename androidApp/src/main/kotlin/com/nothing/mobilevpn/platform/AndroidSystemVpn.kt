@@ -15,12 +15,14 @@ import com.nothing.mobilecore.vpn.NothingVpnService
 import com.nothing.mobilecore.vpn.TunnelStatusRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -97,15 +99,7 @@ class AndroidSystemVpn(
                     LibboxProxyProbe.test("proxy").getOrElse {
                         throw VpnException(VpnError.SmokeProxyFailed, it)
                     }
-                    val probe = URL("https://www.gstatic.com/generate_204").openConnection() as HttpURLConnection
-                    try {
-                        probe.connectTimeout = 3_000
-                        probe.readTimeout = 3_000
-                        probe.instanceFollowRedirects = false
-                        ensure(probe.responseCode == 204) { VpnError.SmokeProxyFailed }
-                    } finally {
-                        probe.disconnect()
-                    }
+                    httpProbeWithRetry()
                     ensure(tunnelStatus.value is TunnelStatus.Running) { VpnError.VpnNotRunningAfterConnect }
                 }
             } catch (_: TimeoutCancellationException) {
@@ -114,5 +108,49 @@ class AndroidSystemVpn(
         }
     }
 
+    /**
+     * Сразу после `Running` VPN-сеть Android и TUN-стек ядра могут быть ещё не готовы принимать
+     * соединения приложения: первый сокет получает «Connection reset». Раньше эту паузу случайно
+     * давала доставка broadcast; теперь повторяем запрос при сетевой ошибке (общий лимит —
+     * таймаут smoke-проверки).
+     */
+    private suspend fun httpProbeWithRetry() {
+        var delayMs = HTTP_PROBE_FIRST_RETRY_MS
+        repeat(HTTP_PROBE_ATTEMPTS - 1) {
+            val result = runCatching { httpProbe() }
+            if (result.isSuccess) return
+            val error = result.exceptionOrNull()
+            if ((error as? VpnException)?.cause !is IOException) throw error!!
+            delay(delayMs)
+            delayMs *= 2
+        }
+        httpProbe()
+    }
+
+    /** HTTP-запрос через туннель, без keep-alive: соединение из пула могло жить в прошлом туннеле. */
+    private fun httpProbe() {
+        val probe = URL("https://www.gstatic.com/generate_204").openConnection() as HttpURLConnection
+        try {
+            probe.connectTimeout = 3_000
+            probe.readTimeout = 3_000
+            probe.instanceFollowRedirects = false
+            probe.useCaches = false
+            probe.setRequestProperty("Connection", "close")
+            val code = try {
+                probe.responseCode
+            } catch (e: IOException) {
+                throw VpnException(VpnError.SmokeProxyFailed, e)
+            }
+            ensure(code == 204) { VpnError.SmokeProxyFailed }
+        } finally {
+            probe.disconnect()
+        }
+    }
+
     override fun vpnPermissionNeeded(): Boolean = VpnService.prepare(context) != null
+
+    private companion object {
+        const val HTTP_PROBE_ATTEMPTS = 4
+        const val HTTP_PROBE_FIRST_RETRY_MS = 300L
+    }
 }

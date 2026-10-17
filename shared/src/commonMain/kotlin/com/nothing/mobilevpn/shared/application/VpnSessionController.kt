@@ -32,6 +32,8 @@ class VpnSessionController(
     private val systemVpn: SystemVpnPort,
     private val configWriter: SessionConfigWriter,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /** Журнал событий для диагностики; платформа обязана редактировать секреты (см. LogRedaction). */
+    private val eventLog: (String) -> Unit = {},
 ) {
     private val uuidRegex =
         Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
@@ -114,6 +116,7 @@ class VpnSessionController(
                     return@withLock Result.success(Unit)
                 }
                 lastFailure = attemptResult.exceptionOrNull()
+                lastFailure?.let { eventLog("Connect attempt $attempt/$maxAttempts failed: ${describeFailure(it)}") }
                 runCatching { systemVpn.stopVpn() }
                 if (attempt < maxAttempts) {
                     delay(1_000L shl (attempt - 1))
@@ -199,6 +202,14 @@ class VpnSessionController(
             }
             is TunnelStatus.Starting, TunnelStatus.Stopping -> Unit
         }
+    }
+
+    /** Код ошибки и цепочка причин: по одному коду не понять, что именно упало (напр. HTTP-проверка). */
+    private fun describeFailure(error: Throwable): String {
+        val chain = generateSequence(error) { it.cause }.take(4).joinToString(" <- ") { t ->
+            "${t::class.simpleName}: ${t.message.orEmpty()}"
+        }
+        return "${error.toVpnError().code} [$chain]"
     }
 
     private fun normalizeProfileForSave(profile: VlessProfile): VlessProfile {

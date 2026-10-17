@@ -29,5 +29,6 @@ class NothingVpnGraph(context: Context) {
         singBoxCoreInfo = singBoxCoreInfo,
         systemVpn = systemVpn,
         configWriter = sessionConfigWriter,
+        eventLog = { ConnectionEventLog.add(appContext, it) },
     )
 }
