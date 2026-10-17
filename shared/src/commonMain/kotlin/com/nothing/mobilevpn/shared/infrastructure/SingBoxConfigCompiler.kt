@@ -59,10 +59,8 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
             put("type", JsonPrimitive("direct"))
             put("tag", JsonPrimitive("direct"))
         })
-        add(buildJsonObject {
-            put("type", JsonPrimitive("block"))
-            put("tag", JsonPrimitive("block"))
-        })
+        // Устаревший special outbound «block» (удалён в sing-box 1.13) не добавляем: блокировка,
+        // если понадобится, делается правилом route с "action": "reject".
     }
 
     private fun buildVlessOutbound(profile: VlessProfile): JsonObject = buildJsonObject {

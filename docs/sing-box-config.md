@@ -1,6 +1,6 @@
 # Генерация конфигурации sing-box
 
-Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Версия ядра в репозитории — sing-box **1.13.x** (`libbox.aar`, лицензия — `third_party/sing-box/LICENSE`); формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
+Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Версия ядра в `libbox.aar` — **`v1.14.0-alpha.17+dirty`** (Go 1.26.2): альфа-версия, собранная из рабочей копии с незакоммиченными правками. Проверить: строка `github.com/sagernet/sing-box` в `jni/arm64-v8a/libbox.so`. Для релиза стоит собрать AAR из стабильного тега. Лицензия — `third_party/sing-box/LICENSE`; формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
 
 ## Структура результата
 
@@ -9,7 +9,7 @@
   "log":      { "level": "<policy.singBoxLogLevel.wire>" },
   "dns":      { ... },                 // см. ниже
   "inbounds": [ { "type": "tun", "tag": "tun-in", ... } ],
-  "outbounds": [ vless "proxy-node", selector "proxy", direct "direct", block "block" ],
+  "outbounds": [ vless "proxy-node", selector "proxy", direct "direct" ],
   "route":    { "final": "proxy", "auto_detect_interface": true,
                 "rules": [ { "port": [53], "action": "hijack-dns" } ] }
 }
@@ -21,7 +21,7 @@
 ### outbounds
 - `proxy-node` — `vless`: `server`, `server_port`, `uuid`, опционально `flow`; блоки `tls` и `transport` по профилю.
 - `proxy` — `selector` с единственным `proxy-node` (нужен, чтобы `urlTest("proxy")` из `LibboxProxyProbe` тестировал настоящий исходящий канал).
-- `direct`, `block`.
+- `direct`. Устаревший special outbound `block` (удалён в 1.13) не генерируется — блокировка при необходимости делается правилом с `"action": "reject"`; проверяет `compile_hasNoLegacySpecialOutbounds`.
 
 **TLS** (`security != none`): `enabled`, `server_name = sni ?: host`, `alpn`, `utls{enabled, fingerprint}` при `fp`, при `security=reality` — `reality{enabled, public_key, short_id}` (обязательны, иначе ошибки `reality_public_key_missing` / `reality_short_id_missing`).
 
@@ -49,6 +49,6 @@
 
 ## Что учесть при изменениях
 - Любое поле, которое добавляется в `TunnelPolicy`, нужно: сериализовать (значение по умолчанию!), валидировать в `validate()`, учесть в компиляторе/`OverrideOptions`, покрыть тестом в `SingBoxConfigCompilerTest`/`TunnelPolicyValidationTest`. Политика хранится как JSON и читается с `ignoreUnknownKeys`, поэтому старые сохранения должны оставаться совместимы.
-- Спецоутбаунды `block` (и `dns`) в sing-box ≥1.11 помечены как deprecated в пользу route-actions; перед обновлением ядра проверить, что генерируемый конфиг не использует удалённые поля (см. [tech-debt.md](tech-debt.md)).
+- Сверено со списком устаревших возможностей sing-box (до 1.14): удалённых полей конфиг не использует. Впереди: опция TUN `stack` устарела в 1.15 и будет удалена в 1.17 — при обновлении ядра до 1.15+ убрать `tunStack` из конфига. Перед любым обновлением ядра сверяться с https://sing-box.sagernet.org/deprecated/ и смотреть WARN в журнале ядра при старте.
 - Секреты попадают в JSON → файл существует только между `writeSessionConfig` и чтением сервисом (удаляется до запуска ядра).
 - Отклонения от документации sing-box требуют обоснования (правило проекта). Документация: https://sing-box.sagernet.org/configuration/.

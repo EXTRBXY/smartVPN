@@ -94,5 +94,5 @@ UI: vm.connect()                       (connectionRequested = true)
 Приложение **не** реализует системный Kill Switch. `singleConnectAttempt` — только политика повторов подключения. Строгая блокировка включается пользователем в Android («Always-on VPN» + «Block connections without VPN»); экран настроек даёт переход и инструкцию.
 
 ## Известные особенности
-- `VpnBoxHandler.serviceReload()` читает `sessionConfigPath`, который после старта всегда `null` (файл удалён до запуска ядра) — reload по запросу ядра фактически не выполняется. Отражено в [tech-debt.md](tech-debt.md).
+- `VpnBoxHandler.serviceReload()` перезапускает ядро конфигом сессии, который хранится только в памяти сервиса (`sessionConfig`, очищается в teardown): файл с секретами удалён до старта ядра. Ошибка reload останавливает сервис с причиной.
 - Сервис возвращает `START_STICKY` для CONNECT. При воссоздании системой (`intent == null`) конфига с секретами уже нет, поэтому сервис сразу останавливается; восстановление делает автоматизация (стартует в `NothingVpnApp.onCreate`), если `autoReconnect` и `connectionRequested`.

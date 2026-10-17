@@ -80,6 +80,16 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     private var tearingDown = false
 
     private var sessionConfigPath: String? = null
+
+    /**
+     * Конфиг и политика текущей сессии — только в памяти, для [VpnBoxHandler.serviceReload].
+     * Файл с секретами удаляется до старта ядра, поэтому перечитать его при reload нельзя;
+     * в памяти процесса эти данные и так есть у libbox. Очищаются в [teardownCore].
+     */
+    @Volatile
+    private var sessionConfig: String? = null
+
+    @Volatile
     private var lastPolicy: TunnelPolicy? = null
     private val lifecycleMutex = Mutex()
 
@@ -329,7 +339,6 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         AndroidSessionConfigWriter.cleanupPreConnect(applicationContext, keepPath = configPath)
         LibboxAndroidBootstrap.ensureSetup()
         sessionConfigPath = configPath
-        lastPolicy = policy
         val configFile = File(configPath)
         val content = configFile.readText()
         ensure(content.isNotBlank()) { VpnError.EmptyConfig }
@@ -343,6 +352,8 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         DefaultNetworkMonitor.start()
 
         commandServer.startOrReloadService(content, buildOverrideOptions(policy))
+        sessionConfig = content
+        lastPolicy = policy
 
         if (commandServer.needWIFIState()) {
             val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -396,6 +407,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             runCatching { commandServer.close() }
         }
         sessionConfigPath = null
+        sessionConfig = null
         lastPolicy = null
         systemProxyAvailable = false
         systemProxyEnabled = false
@@ -504,13 +516,19 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         }
 
         override fun serviceReload() {
-            val path = sessionConfigPath ?: return
-            val pol = lastPolicy ?: return
             scope.launch {
-                runCatching {
-                    val json = File(path).readText()
-                    commandServer.startOrReloadService(json, buildOverrideOptions(pol))
-                }.onFailure { SafeAndroidLog.e(VPN_LOG_TAG, "serviceReload", it) }
+                lifecycleMutex.withLock {
+                    // Сессия могла закончиться, пока ждали мьютекс.
+                    val config = sessionConfig ?: return@withLock
+                    val policy = lastPolicy ?: return@withLock
+                    runCatching {
+                        commandServer.startOrReloadService(config, buildOverrideOptions(policy))
+                    }.onFailure { e ->
+                        SafeAndroidLog.e(VPN_LOG_TAG, "serviceReload", e)
+                        ConnectionEventLog.add(this@NothingVpnService, "VPN service: reload failed (${e.toVpnError().code})")
+                        requestStopLocked(error = e.toVpnError())
+                    }
+                }
             }
         }
 

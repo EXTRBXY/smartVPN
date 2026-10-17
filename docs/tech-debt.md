@@ -4,7 +4,8 @@
 
 ## P1
 
-### 1. `serviceReload()` фактически мёртв
+### 1. ~~`serviceReload()` фактически мёртв~~ — сделано
+Конфиг сессии хранится в памяти сервиса до teardown. Исходное описание:
 `NothingVpnService.VpnBoxHandler.serviceReload()` читает `sessionConfigPath`, но `connectSuspend` обнуляет его сразу после удаления файла (по дизайну — чтобы секреты не лежали на диске). Следовательно reload/`setSystemProxyEnabled` не перезапускают ядро. Нужно решение: хранить JSON конфига в памяти сервиса на время сессии (и очищать в `teardown`) либо явно отключить возможность.
 
 ### 2. ~~Два источника истины о состоянии туннеля~~ — сделано
@@ -56,7 +57,7 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 - Миграция DataStore → EncryptedSharedPreferences с retry-маркером может быть удалена, когда не останется старых установок.
 
 ### 13. Конфигурация sing-box
-- `block` outbound и `dns`-правила: проверить совместимость с 1.13 (special outbounds deprecated с 1.11); маршрутизации нет, кроме `hijack-dns` и `final=proxy`.
+- ~~`block` outbound~~ — убран; конфиг сверен с deprecated-списком до 1.14. Ядро в AAR — `1.14.0-alpha.17+dirty`: для релиза собрать из стабильного тега. TUN `stack` устареет в 1.15. Маршрутизации нет, кроме `hijack-dns` и `final=proxy`.
 - Параметр `profile` в `buildTunInbound` не используется.
 - Поддерживаются только `tcp/ws/grpc`; нет `httpupgrade`, `h2`, `xhttp`, `mux`, multiplex, `packet_encoding`.
 - Конфиг строится руками через `buildJsonObject`; рассмотреть типизированные модели сериализации.

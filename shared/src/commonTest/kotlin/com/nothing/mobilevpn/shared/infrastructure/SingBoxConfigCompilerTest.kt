@@ -5,7 +5,12 @@ import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VlessSecurity
 import com.nothing.mobilecore.shared.domain.VlessTransport
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -100,5 +105,14 @@ class SingBoxConfigCompilerTest {
         assertTrue(json.contains("\"server\":\"local\""))
         assertTrue(json.contains("\"final\":\"doh\""))
         assertTrue(json.contains("hijack-dns"))
+    }
+
+    @Test
+    fun compile_hasNoLegacySpecialOutbounds() {
+        // block/dns outbounds устарели в sing-box 1.11 и удалены в 1.13 (ядро сейчас 1.14).
+        val json = SingBoxConfigCompiler().compile(profile, policy).getOrThrow()
+        val types = Json.parseToJsonElement(json).jsonObject["outbounds"]!!.jsonArray
+            .map { it.jsonObject["type"]!!.jsonPrimitive.content }
+        assertEquals(listOf("vless", "selector", "direct"), types)
     }
 }

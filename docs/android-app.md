@@ -30,7 +30,7 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 - `teardown()`: удаляет session-файл, закрывает `tunPfd`, `DefaultNetworkMonitor.stop()`, `commandServer.closeService()/close()`.
 - `onRevoke`: остановка с `error = vpn_revoked`. `onDestroy`: teardown и `Stopped`, если ещё не опубликован. `VpnBoxHandler.serviceStop` (запрос ядра) — полная остановка, кроме вызова во время нашего же `teardown`.
 - `sendNotification`: уведомления ядра (канал по `identifier`, `IMPORTANCE_HIGH`); открываемый URL — только после `isSafeNotificationUrl`.
-- `VpnBoxHandler : CommandServerHandler`: `serviceStop`, `serviceReload`, `getSystemProxyStatus`, `setSystemProxyEnabled`, `writeDebugMessage` (только в debug, через `LogRedaction`).
+- `VpnBoxHandler : CommandServerHandler`: `serviceStop`, `serviceReload` (перезапуск ядра с конфигом сессии из памяти; при ошибке — остановка с причиной), `getSystemProxyStatus`, `setSystemProxyEnabled`, `writeDebugMessage` (только в debug, через `LogRedaction`).
 
 ### Контракты и состояние
 - `TunnelStatusRepository` (в `NothingVpnGraph.tunnelStatus`) — `StateFlow<TunnelStatus>` в памяти процесса, `newSessionId()`, `publish()` (обновляет плитку через `requestListeningState`). При создании удаляет устаревший `nothing_vpn_running_flag`. Подробно — [vpn-lifecycle.md](vpn-lifecycle.md).
