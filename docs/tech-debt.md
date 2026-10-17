@@ -27,12 +27,12 @@
 ViewModel напрямую делает сокет-соединения (`testProfileLatency`, `testDnsEndpoint`, `testServerEndpoint`), HTTP-запрос внешнего IP, читает `AppPreferences`, комбинирует политику. По правилам проекта это должно быть портом (`ConnectivityProbePort`, `ExternalIpPort`) в `application` с реализацией в `platform`. `MainActivity` также напрямую вызывает `graph.profileRepository`/`sessionController` (QR-импорт).
 
 ### 6. Расхождение имён пакета и каталогов
-Каталоги `com/nothing/mobilevpn`, пакеты и `applicationId` — `com.nothing.mobilecore`; `rootProject.name = NothingMobileVpn`; бренд в UI «Nothing Mobile». Выровнять в отдельной задаче: переименование `applicationId` потребует миграции данных (EncryptedSharedPreferences привязаны к приложению), action-строк и permission.
+Каталоги `com/nothing/mobilevpn`, пакеты и `applicationId` — `com.nothing.mobilecore`; `rootProject.name = NothingMobileVpn`; бренд в UI «Nothing Mobile». Выровнять в отдельной задаче: переименование `applicationId` потребует миграции данных (зашифрованное хранилище и ключ Keystore привязаны к приложению), action-строк и permission.
 
 ## P2
 
 ### 7. Глобальные синглтоны с изменяемым состоянием
-`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener`, `ProfileStorageMigration`, `ConnectionEventLog`, `LibboxProxyProbe`. Нет внедрения зависимостей (ручной `NothingVpnGraph`, сервис его не использует). Для тестов сервис/мониторы недоступны. Рассмотреть Hilt/Koin или явную передачу через `Graph`; `NothingVpnService` получает политику сериализованной в `Intent`.
+`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener`, `ConnectionEventLog`, `LibboxProxyProbe`. Нет внедрения зависимостей (ручной `NothingVpnGraph`, сервис его не использует). Для тестов сервис/мониторы недоступны. Рассмотреть Hilt/Koin или явную передачу через `Graph`; `NothingVpnService` получает политику сериализованной в `Intent`.
 
 ### 8. ~~`VpnSessionController` создаёт собственный scope и содержит смесь ответственностей~~ — сделано
 Профили вынесены в `ProfileService`, `dispatcher`/`scope` внедряются. `AndroidSystemVpn` по-прежнему жёстко использует `Main.immediate`/`IO`. Исходное описание:
@@ -47,10 +47,12 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 Свойство переименовано в `singleConnectAttempt` (ключ JSON прежний), связь с `autoReconnect` — в одном месте (`SettingsViewModel`). Разнести на два переключателя в UI — продуктовое решение, не сделано. Исходное описание:
 Название намекает на Kill Switch, фактически — «без ретраев». UI-переключатель «Восстанавливать соединение» пишет в него `!enabled`, дублируя флаг `autoReconnect` в `AppPreferences` — два источника для двух связанных, но разных вещей (ретраи подключения vs. восстановление после сбоя). Переименовать/разделить.
 
-### 11. Политика туннеля глобальна и размазана по хранилищам
+### 11. Политика туннеля глобальна и размазана по хранилищам — частично
+Профили, секреты и политика — в одном зашифрованном хранилище с версией схемы. Остаток: `AppPreferences` (автоматизация, наборы правил, `connectionRequested`) — открытые SharedPreferences. Исходное описание:
 `TunnelPolicy` в `nothing_vpn_profiles`, `RoutingRuleSet` и автоматизация — в открытых `nothing_vpn_user_settings`, `connectionRequested` — там же и дополнительно «running» в третьем файле. Консолидировать (Proto/Preferences DataStore), добавить версионирование схемы.
 
-### 12. Хранилище и крипто
+### 12. ~~Хранилище и крипто~~ — сделано
+Своё хранилище на Keystore + AES-GCM с атомарной записью, чтения не пишут, двухфазная миграция; `security-crypto` нужен только для чтения старых данных. Исходное описание:
 - `androidx.security:security-crypto:1.1.0-alpha06` (alpha, deprecated-направление).
 - `ProfileRepositoryAndroid.listProfiles()` при чтении может **писать** (самоисцеление/санитизация), а каждое чтение секретов — отдельный вызов на профиль.
 - `apply()` вместо `commit()` для критичных ключей (`active_profile_id`, список профилей) — окно потери при убийстве процесса.

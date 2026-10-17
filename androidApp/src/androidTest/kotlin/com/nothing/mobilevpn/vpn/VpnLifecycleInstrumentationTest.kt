@@ -3,8 +3,6 @@ package com.nothing.mobilecore.vpn
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nothing.mobilecore.NothingVpnApp
-import com.nothing.mobilecore.platform.ProfileRepositoryAndroid
-import com.nothing.mobilecore.platform.SecureStoreAndroid
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.runBlocking
@@ -53,8 +51,7 @@ class VpnLifecycleInstrumentationTest {
 
     @Test
     fun updatingProfile_replacesStoredSecret() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val repository = ProfileRepositoryAndroid(context, SecureStoreAndroid(context))
+        val repository = ApplicationProvider.getApplicationContext<NothingVpnApp>().graph.profileRepository
         val id = "instrumentation-secret-update"
         val original = VlessProfile(
             id = id,

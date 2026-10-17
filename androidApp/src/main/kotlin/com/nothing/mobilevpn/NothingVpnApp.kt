@@ -6,11 +6,13 @@ import android.app.NotificationManager
 import android.os.Build
 import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilecore.platform.NothingVpnGraph
-import com.nothing.mobilecore.platform.ProfileStorageMigration
+import com.nothing.mobilecore.platform.ConnectionEventLog
 import com.nothing.mobilecore.platform.VpnAutomationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import com.nothing.mobilecore.platform.storage.BootstrapOutcome
 
 class NothingVpnApp : Application() {
 
@@ -22,7 +24,7 @@ class NothingVpnApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        ProfileStorageMigration.startProfileStorageMigration(this, applicationScope)
+        loadStorage()
         LibboxAndroidBootstrap.attachBase(this)
         LibboxAndroidBootstrap.ensureSetup()
         automation.start()
@@ -34,6 +36,25 @@ class NothingVpnApp : Application() {
                 NotificationManager.IMPORTANCE_LOW,
             )
             getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+        }
+    }
+
+    /**
+     * Загрузка (и при необходимости миграция) зашифрованного хранилища в фоне. Репозиторий
+     * профилей ждёт её завершения ([com.nothing.mobilecore.platform.storage.VaultStore.awaitReady]).
+     */
+    private fun loadStorage() {
+        applicationScope.launch(Dispatchers.IO) {
+            val result = runCatching { graph.vaultBootstrap.load() }
+            result.onSuccess { (vault, outcome) ->
+                graph.vaultStore.initialize(vault)
+                if (outcome != BootstrapOutcome.LOADED) {
+                    ConnectionEventLog.add(this@NothingVpnApp, "Storage: ${outcome.name.lowercase()}")
+                }
+            }.onFailure { e ->
+                graph.vaultStore.initializeReadOnly()
+                ConnectionEventLog.add(this@NothingVpnApp, "Storage: load failed, read-only (${e.javaClass.simpleName})")
+            }
         }
     }
 

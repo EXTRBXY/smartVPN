@@ -14,12 +14,6 @@ fun interface SingBoxCoreInfoPort {
     suspend fun version(): String
 }
 
-interface SecureStorePort {
-    suspend fun save(key: String, value: String)
-    suspend fun read(key: String): String?
-    suspend fun remove(key: String)
-}
-
 interface SingBoxConfigCompilerPort {
     fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String>
 }

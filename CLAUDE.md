@@ -41,14 +41,14 @@ Windows / PowerShell, JDK 17, из корня:
 
 - Ядро не переписываем и не дублируем: приложение **компилирует policy → sing-box JSON** и запускает libbox. Никаких `ProcessBuilder`/CLI-бинарника в процессе.
 - Слои: `domain` → `application` → `infrastructure` → `platform` → `ui`; зависимости только внутрь. UI не содержит VPN/системного кода, только состояние и команды.
-- В `shared` нельзя тянуть Android SDK типы. Платформа подключается через порты (`SystemVpnPort`, `ProfileRepositoryPort`, `SecureStorePort`, `SessionConfigWriter`, `SingBoxCoreInfoPort`).
+- В `shared` нельзя тянуть Android SDK типы. Платформа подключается через порты (`SystemVpnPort`, `ProfileRepositoryPort`, `SessionConfigWriter`, `SingBoxCoreInfoPort`, `ConnectivityProbePort`).
 - Важные сетевые параметры (DNS/route/TUN) задаются явно в policy, а не «магией» в UI. Отклонение от документации sing-box — только с обоснованием и описанием риска.
 - Сохранение настроек всегда проходит `TunnelPolicy.validate()` и возвращает явную ошибку пользователю.
 - UI минималистичный, короткие однотипные подписи. Тексты — только в `res/values/strings.xml` (`stringResource` в composable, `context.getString` в колбэках); русских литералов в Kotlin-коде UI быть не должно.
 
 ## Инварианты безопасности (проверяй при любых правках затрагиваемых мест)
 
-1. **Секреты** (`uuid`, `realityPublicKey`, `realityShortId`) хранятся только в `SecureStoreAndroid` (EncryptedSharedPreferences). В списке профилей они обнуляются (`stripSecrets`). Не клади их в логи, `Intent`, `SharedPreferences` в открытом виде.
+1. **Секреты** (`uuid`, `realityPublicKey`, `realityShortId`) хранятся только в зашифрованном хранилище `noBackupFilesDir/vault/state.bin` (AES-256-GCM, ключ в Android Keystore, `platform/storage/`). Не клади их в логи, `Intent`, `SharedPreferences` или другие файлы в открытом виде.
 2. **Логи** — только через `LogRedaction` / `SafeAndroidLog` / `ConnectionEventLog`. Пользователю уходят только `VpnError` (фиксированные тексты из `strings.xml`), а не текст исключений.
 3. **Состояние туннеля** передаётся внутри процесса через `TunnelStatusRepository` (`StateFlow`), внутренних broadcast нет. Если всё же понадобится broadcast — `setPackage` + signature-permission + `RECEIVER_NOT_EXPORTED`.
 4. **Session config** (`sing-box-session-*.json` и `.json.tmp`) лежит в `noBackupFilesDir`, читается сервисом и **удаляется до старта ядра**; чистка не должна трогать `keepPath` и его `.tmp`-пару.
@@ -60,7 +60,7 @@ Windows / PowerShell, JDK 17, из корня:
 
 - Истина о туннеле — `TunnelStatus` в `TunnelStatusRepository` (только память процесса, пишет только `NothingVpnService`). `VpnSessionState` контроллера — состояние UI-стороны, выравнивается по `TunnelStatus` подпиской внутри контроллера. Не сохраняй «running» на диск: после смерти процесса туннель гарантированно мёртв, а сохранённый флаг уже давал ложное «Вкл» на плитке. Промежуточный `Stopped` при reconnect — ожидаемый, не ошибка.
 - Ошибки — `enum VpnError` (`shared/domain/VpnError.kt`), бросаются через `ensure { }` / `vpnFail()`, любое исключение превращается в ошибку только через `toVpnError()`. Новый код = значение в enum + ветка в `ui/UserErrorText.kt` (исчерпывающий `when`, иначе не соберётся) + строка в `strings.xml`. Не сравнивай `exception.message` со строками.
-- Доступ к профилям/политике ждёт `ProfileStorageMigration.awaitProfileStorageReady()` — новые методы репозитория должны делать то же.
+- Доступ к профилям/политике ждёт `VaultStore.awaitReady()`, изменения — только через `VaultStore.update` (атомарная запись, ошибка пробрасывается). Меняя `StoredVault`, давай новым полям значения по умолчанию; миграции — в `VaultBootstrap` (двухфазная: старые данные удаляются только при следующем успешном запуске). См. [docs/data-and-storage.md](docs/data-and-storage.md).
 - `TunnelPolicy.singleConnectAttempt` (в JSON — `failClosed`) — «одна попытка без повторов», а не Android Kill Switch. Переключатель «Восстанавливать соединение» пишет и `autoReconnect`, и `singleConnectAttempt = !enabled` — только в `SettingsViewModel`.
 - Строковые поля domain — enum с `wire`-строкой (`WireEnums.kt`) и мягким сериализатором: JSON в хранилище не меняется, неизвестное значение читается как fallback. Меняя enum, не трогай `wire` существующих значений и прогоняй `StorageCompatibilityTest`; id профиля считается от `wire`.
 - Операции с профилями — `ProfileService`; `VpnSessionController` — только сессия.

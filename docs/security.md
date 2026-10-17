@@ -9,7 +9,7 @@ UUID профиля и параметры Reality (`pbk`, `sid`); адрес с�
 
 | Область | Мера | Где |
 |---|---|---|
-| Секреты в покое | Отдельное Keystore-backed хранилище; из общего списка профилей секреты вырезаются | `SecureStoreAndroid`, `ProfileRepositoryAndroid.stripSecrets` |
+| Секреты в покое | Единый зашифрованный файл в `noBackupFilesDir` (AES-256-GCM, ключ в Android Keystore, новый IV на запись), атомарная запись | `platform/storage/` |
 | Секреты в конфиге | Файл сессии в `noBackupFilesDir`, удаляется сервисом **до** старта ядра; чистка устаревших файлов | `AndroidSessionConfigWriter`, `NothingVpnService.connectSuspend` |
 | Логи | Маскирование UUID, `vless://…@`, `pbk`, `sid`, путей session-файлов; в release исключения логируются без сообщения; события пользовательского журнала режутся до 240 символов и без переводов строк | `LogRedaction`, `SafeAndroidLog`, `ConnectionEventLog` |
 | Экспорт | Ссылка с UUID отдаётся только после диалога-предупреждения; диагностический отчёт не содержит секретов | `HomeRoute`, `DiagnosticsRoute` |
@@ -30,7 +30,7 @@ UUID профиля и параметры Reality (`pbk`, `sid`); адрес с�
 - **`QUERY_ALL_PACKAGES`**: допустим только при личном/внутреннем распространении (Google Play потребует обоснования).
 - **`ACCESS_FINE_LOCATION`**: нужен для SSID Wi-Fi и `NeedWIFIState`; без него сессия с правилами по Wi-Fi падает (`wifi_state_needs_fine_location`).
 - **`AppPreferences` не шифруются**: там имена доверенных Wi-Fi, наборы приложений, флаги; секретов нет.
-- **`security-crypto` в alpha** и deprecated-статус `EncryptedSharedPreferences` — кандидат на замену (Tink + DataStore/Keystore напрямую).
+- `security-crypto` (alpha, deprecated) больше не используется для хранения — только для чтения старых данных при миграции; удалить вместе с `AndroidLegacySource`, когда старых установок не останется.
 - `lastError` — `VpnError` с фиксированным текстом, данных профиля в нём нет. Журнал событий проходит редакцию регулярками — это best-effort, а не гарантия; новые сообщения не должны включать данные профиля.
 - Парсер ссылок принимает произвольные `extraQuery`; они сохраняются в профиле и воспроизводятся при экспорте, но в JSON ядра не попадают.
 

@@ -32,7 +32,6 @@
 | Порт | Реализация (Android) | Роль |
 |---|---|---|
 | `SingBoxCoreInfoPort` | `AndroidSingBoxCoreInfo` | `Libbox.version()` |
-| `SecureStorePort` | `SecureStoreAndroid` | key-value для секретов |
 | `SingBoxConfigCompilerPort` | `SingBoxConfigCompiler` (из shared) | `compile(profile, policy): Result<String>` |
 | `ProfileRepositoryPort` | `ProfileRepositoryAndroid` | профили, активный профиль, `TunnelPolicy`, `observeProfiles(): Flow` |
 | `SystemVpnPort` | `AndroidSystemVpn` | `startVpn`, `stopVpn`, `stopVpnAndAwait`, `smokeCheck`, `vpnPermissionNeeded` |
@@ -44,9 +43,9 @@
 
 ```
 NothingVpnGraph(context)
- ├─ secureStore            SecureStoreAndroid
  ├─ appPreferences         AppPreferences      (автоматизация, наборы маршрутов, connectionRequested)
- ├─ profileRepository      ProfileRepositoryAndroid(secureStore)
+ ├─ vaultStore / vaultBootstrap   зашифрованное хранилище и его загрузка/миграция
+ ├─ profileRepository      ProfileRepositoryAndroid(vaultStore)
  ├─ configCompiler         SingBoxConfigCompiler
  ├─ singBoxCoreInfo        AndroidSingBoxCoreInfo
  ├─ systemVpn              AndroidSystemVpn
@@ -57,7 +56,7 @@ NothingVpnGraph(context)
 
 Доступ: `(application as NothingVpnApp).graph` — из `MainActivity`, `VpnQuickTileService`, `BootCompletedReceiver` (через `app.automation`). `NothingVpnService` граф не использует, получает всё через `Intent`-extras и синглтоны.
 
-`NothingVpnApp.onCreate`: запускает `ProfileStorageMigration`, `LibboxAndroidBootstrap.attachBase/ensureSetup`, `automation.start()`, `tunnelStatsMonitor.start()`, создаёт канал уведомлений `nothing_vpn` (IMPORTANCE_LOW).
+`NothingVpnApp.onCreate`: запускает загрузку хранилища (`VaultBootstrap` → `VaultStore.initialize`), `LibboxAndroidBootstrap.attachBase/ensureSetup`, `automation.start()`, `tunnelStatsMonitor.start()`, создаёт канал уведомлений `nothing_vpn` (IMPORTANCE_LOW).
 
 ## Процессы и потоки
 
@@ -69,7 +68,7 @@ NothingVpnGraph(context)
 
 ## Глобальные синглтоны (важно для рефакторинга)
 
-`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener` (actor), `ProfileStorageMigration`, `ConnectionEventLog`, `LocalResolver`, `LibboxProxyProbe`, `SafeAndroidLog`, `VpnEncryption`. Они хранят изменяемое состояние на уровне процесса и затрудняют unit-тестирование.
+`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener` (actor), `ConnectionEventLog`, `LocalResolver`, `LibboxProxyProbe`, `SafeAndroidLog`. Они хранят изменяемое состояние на уровне процесса и затрудняют unit-тестирование.
 
 ## Расширение под iOS
 

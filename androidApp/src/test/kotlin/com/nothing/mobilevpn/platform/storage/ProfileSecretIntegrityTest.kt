@@ -1,4 +1,4 @@
-package com.nothing.mobilecore.platform
+package com.nothing.mobilecore.platform.storage
 
 import org.junit.Test
 import kotlin.test.assertFalse

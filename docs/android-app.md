@@ -54,10 +54,8 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 | `AndroidSystemVpn` | `SystemVpnPort`, `tunnelStatus` из `TunnelStatusRepository`. Старт: `startForegroundService(ACTION_CONNECT, sessionId)`, ожидание `Running/Stopped` этой сессии, таймаут 30 с. Стоп: если уже `Stopped` — ничего; иначе `ACTION_DISCONNECT` и ожидание `Stopped`, таймаут 10 с. `smokeCheck`: `LibboxProxyProbe.test("proxy")` (urlTest группы `proxy`) + HTTPS `GET https://www.gstatic.com/generate_204` (ожидается 204; без keep-alive; при `IOException` до 4 попыток с паузой 300/600/1200 мс — сразу после старта первый сокет приложения через TUN может получить RST) + `TunnelStatus.Running`; общий таймаут 7 с. Неудачные попытки подключения пишутся в журнал с цепочкой причин |
 | `LibboxProxyProbe` | Одноразовый `CommandClient` с no-op обработчиком для `urlTest(group)` |
 | `TunnelStatsMonitor` | Цикл: пока `TunnelStatus.Running`, подключается `CommandClient` с `CommandStatus` раз в секунду и публикует `StateFlow<TunnelStats>` (скорости, итоги, число соединений) |
-| `ProfileRepositoryAndroid` | `ProfileRepositoryPort` поверх `EncryptedSharedPreferences("nothing_vpn_profiles")` + `SecureStorePort` для секретов. Содержит `ProfileSecrets` и `ProfileSecretIntegrity` (проверка согласованности секрета) |
-| `ProfileStorageMigration` | Разовый перенос из старого незашифрованного DataStore (`datastore/nothing_mobile_vpn.preferences_pb`) с retry-маркером; экспонирует `awaitProfileStorageReady()` |
-| `SecureStoreAndroid` | `EncryptedSharedPreferences("nothing_vpn_secure")`, AES256-GCM/SIV |
-| `VpnEncryption` | Фабрика `MasterKey` и prefs профилей |
+| `ProfileRepositoryAndroid` | `ProfileRepositoryPort` поверх `storage/VaultStore` (профили с секретами, активный профиль, политика) |
+| `storage/*` | Зашифрованное хранилище: `KeystoreVaultCipher`, `VaultFile`, `StoredVault`, `VaultStore`, загрузка и двухфазная миграция `VaultBootstrap`, чтение старых данных `AndroidLegacySource`/`LegacyDecoder`/`ProfileSecretIntegrity`. См. [data-and-storage.md](data-and-storage.md) |
 | `AppPreferences` | Обычные `SharedPreferences("nothing_vpn_user_settings")`: флаги автоматизации, доверенные Wi-Fi, наборы маршрутизации (`RoutingRuleSet` как JSON), `connectionRequested` |
 | `VpnAutomationCoordinator` | Автоподключение и health-монитор (см. [vpn-lifecycle.md](vpn-lifecycle.md)) |
 | `BootCompletedReceiver` | → `automation.onBootCompleted()` через `goAsync()` |
@@ -103,7 +101,7 @@ ViewModel не делают сетевых запросов и не трогаю
 `UserErrorText` — исчерпывающий перевод `VpnError` в строки `strings.xml` (см. [glossary.md](glossary.md)); классификация исключений — в `shared` (`toVpnError`).
 
 ## Тесты androidApp
-- `src/test` (JVM): `ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest`, `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`.
+- `src/test` (JVM): `storage/VaultTest`, `storage/ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest`, `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`.
 - `src/androidTest`: `VpnLifecycleInstrumentationTest` (начальный статус туннеля, удаление старого running-флага, константы action, `stopVpnAndAwait` в остановленном состоянии, замена секрета при upsert).
 
 ## Сборка/ProGuard
