@@ -1,0 +1,105 @@
+# Модуль `androidApp`
+
+Исходники: `androidApp/src/main/kotlin/com/nothing/mobilevpn/` (пакет `com.nothing.mobilecore`). Ресурсы: `androidApp/src/main/res`.
+
+## Манифест (`AndroidManifest.xml`)
+
+| Элемент | Значение |
+|---|---|
+| Собственный permission | `com.nothing.mobilecore.permission.INTERNAL_BROADCAST`, `protectionLevel=signature` — защита внутренних broadcast |
+| Разрешения | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `ACCESS_FINE/COARSE_LOCATION` (SSID Wi-Fi и `NeedWIFIState` ядра, как в SFA), `CHANGE_NETWORK_STATE`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `CAMERA` (QR; `uses-feature camera required=false`), `QUERY_ALL_PACKAGES` (список всех приложений для split tunneling; осознанно для личного распространения) |
+| `<application>` | `NothingVpnApp`, `allowBackup=false`, `networkSecurityConfig` (cleartext запрещён), правила backup/extraction пустые |
+| `MainActivity` | launcher + `QS_TILE_PREFERENCES` (долгое нажатие на плитку открывает приложение), `adjustResize` |
+| `NothingVpnService` | `exported=false`, `BIND_VPN_SERVICE`, `foregroundServiceType=connectedDevice`, action `android.net.VpnService` |
+| `BootCompletedReceiver` | `exported=true`, `BOOT_COMPLETED` и `MY_PACKAGE_REPLACED` |
+| `VpnQuickTileService` | `exported=true`, `BIND_QUICK_SETTINGS_TILE`, `QS_TILE` |
+
+Строки (русские) — `res/values/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Многие тексты в `MainActivity` захардкожены, а не вынесены в ресурсы.
+
+## Пакет `vpn/` — системный VPN
+
+### `NothingVpnService : VpnService, MobilePlatformInterface`
+Ядро Android-реализации. Поля: `commandServer` (libbox), `tunPfd`, `sessionConfigPath`, `lastPolicy`, `lifecycleMutex`, `scope(IO)`.
+
+Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_CONFIG_PATH`, `EXTRA_POLICY_JSON`), `ACTION_DISCONNECT` (`EXTRA_USER_DISCONNECT`).
+
+- `onStartCommand(CONNECT)`: читает путь и политику, `startForeground(NOTIFICATION_ID=1001, type=CONNECTED_DEVICE)`, в `scope` под мьютексом вызывает `connectSuspend`; при исключении — `sendConnectResult(false)` и полная остановка. Возвращает `START_STICKY` для CONNECT, `START_NOT_STICKY` иначе.
+- `onStartCommand(DISCONNECT)`: при `EXTRA_USER_DISCONNECT` сбрасывает `AppPreferences.connectionRequested`, останавливает сервис.
+- `connectSuspend`: `teardown()` предыдущего ядра → `VpnRunningState.publish(false)` → чистка session-файлов → `LibboxAndroidBootstrap.ensureSetup()` → чтение JSON из файла → **удаление файла** → `CommandServer(handler, this).start()` → `DefaultNetworkMonitor.start()` → `commandServer.startOrReloadService(json, OverrideOptions)` → проверка `needWIFIState` против `ACCESS_FINE_LOCATION` → `sendConnectResult(true)`.
+- `buildOverrideOptions(policy)`: `autoRedirect=false`; для `PER_APP_ALLOWED` — `includePackage = allowed + собственный пакет`; для `PER_APP_EXCLUDED` — `excludePackage = allowed`; для `FULL_TUN` фильтра нет (собственный трафик диагностики тоже идёт через туннель, сокеты ядра защищены `protect(fd)`).
+- `openTun(TunOptions)` — реализация `PlatformInterface.openTun`: `VpnService.Builder` (MTU, адреса v4/v6, DNS, маршруты — `addRoute/excludeRoute(IpPrefix)` на API 33+, иначе `inet*RouteRange`; `addAllowedApplication/addDisallowedApplication`; опционально системный HTTP-прокси на API 29+), `establish()` → fd.
+- `teardown()`: удаляет session-файл, закрывает `tunPfd`, `DefaultNetworkMonitor.stop()`, `commandServer.closeService()/close()`.
+- `onRevoke` / `onDestroy`: остановка и публикация `running=false`.
+- `sendNotification`: уведомления ядра (канал по `identifier`, `IMPORTANCE_HIGH`); открываемый URL — только после `isSafeNotificationUrl`.
+- `VpnBoxHandler : CommandServerHandler`: `serviceStop`, `serviceReload`, `getSystemProxyStatus`, `setSystemProxyEnabled`, `writeDebugMessage` (только в debug, через `LogRedaction`).
+
+### Контракты и состояние
+- `VpnConnectResultContract` — action `...VPN_CONNECT_RESULT`, extras `ok`, `message`.
+- `VpnRunningStateContract` — action `...VPN_RUNNING_STATE`, extra `running`.
+- `VpnInternalBroadcastSecurity.PERMISSION` — имя signature-permission.
+- `VpnRunningState` — `@Volatile isRunning` + флаг в SharedPreferences `nothing_vpn_running_flag` (`running`, `started_at`). `publish()` пишет синхронно (`commit`), шлёт broadcast с permission и обновляет плитку. `syncFromDisk()` вызывается при старте Activity и плитки.
+
+## Пакет `libbox/` — мост к ядру
+
+| Класс | Роль |
+|---|---|
+| `LibboxAndroidBootstrap` | Хранит `Application`, однократный `Libbox.setup(basePath=filesDir, workingPath=filesDir/runtime, tempPath=cacheDir, fixAndroidStack, logMaxLines=3000, debug=BuildConfig.DEBUG)`, `setLocale` |
+| `MobilePlatformInterface` | `interface` с реализациями по умолчанию для `PlatformInterface`: `usePlatformAutoDetectInterfaceControl=true`, `findConnectionOwner` (uid → пакеты), `getInterfaces`, `readWIFIState`, `systemCertificates` (AndroidCAStore), `localDNSTransport = LocalResolver`, мониторинг интерфейса → `DefaultNetworkMonitor`. `openTun` и `autoDetectInterfaceControl` переопределяет сервис. Содержит вложенный `StringArray` (итератор для libbox) |
+| `DefaultNetworkListener` | Actor вокруг `ConnectivityManager` NetworkCallback (версия API определяет способ регистрации) — хранит «текущую» сеть |
+| `DefaultNetworkMonitor` | Подписка на `DefaultNetworkListener`, вычисляет имя/индекс интерфейса (до 10 попыток по 100 мс) и вызывает `InterfaceUpdateListener.updateDefaultInterface` |
+| `LocalResolver` | `LocalDNSTransport`: DNS через `android.net.DnsResolver` на текущей сети (raw-режим на API 29+) |
+| `TunRouteExt` | `RoutePrefix.toAndroidIpPrefix()` |
+
+## Пакет `platform/` — адаптеры и вспомогательные сервисы
+
+| Класс | Назначение |
+|---|---|
+| `NothingVpnGraph` | Ручной DI-контейнер (см. [architecture.md](architecture.md)) |
+| `AndroidSystemVpn` | `SystemVpnPort`. Старт: регистрирует ресивер результата, `startForegroundService(ACTION_CONNECT)`, таймаут 30 с. Стоп: `ACTION_DISCONNECT`, ожидание `running=false`, таймаут 10 с. `smokeCheck`: `LibboxProxyProbe.test("proxy")` (urlTest группы `proxy`) + HTTPS `GET https://www.gstatic.com/generate_204` (ожидается 204) + `VpnRunningState`; общий таймаут 7 с |
+| `LibboxProxyProbe` | Одноразовый `CommandClient` с no-op обработчиком для `urlTest(group)` |
+| `TunnelStatsMonitor` | Цикл: пока `VpnRunningState.isRunning`, подключается `CommandClient` с `CommandStatus` раз в секунду и публикует `StateFlow<TunnelStats>` (скорости, итоги, число соединений) |
+| `ProfileRepositoryAndroid` | `ProfileRepositoryPort` поверх `EncryptedSharedPreferences("nothing_vpn_profiles")` + `SecureStorePort` для секретов. Содержит `ProfileSecrets` и `ProfileSecretIntegrity` (проверка согласованности секрета) |
+| `ProfileStorageMigration` | Разовый перенос из старого незашифрованного DataStore (`datastore/nothing_mobile_vpn.preferences_pb`) с retry-маркером; экспонирует `awaitProfileStorageReady()` |
+| `SecureStoreAndroid` | `EncryptedSharedPreferences("nothing_vpn_secure")`, AES256-GCM/SIV |
+| `VpnEncryption` | Фабрика `MasterKey` и prefs профилей |
+| `AppPreferences` | Обычные `SharedPreferences("nothing_vpn_user_settings")`: флаги автоматизации, доверенные Wi-Fi, наборы маршрутизации (`RoutingRuleSet` как JSON), `connectionRequested` |
+| `VpnAutomationCoordinator` | Автоподключение и health-монитор (см. [vpn-lifecycle.md](vpn-lifecycle.md)) |
+| `BootCompletedReceiver` | → `automation.onBootCompleted()` через `goAsync()` |
+| `AndroidSessionConfigWriter` + `SessionConfigFileLifecycle` | Запись `sing-box-session-<ts>.json` (через `.tmp` + rename) в `noBackupFilesDir`; политика очистки: ≤2 файла, возраст ≤5 мин (6 ч для явной очистки), `keepPath` неприкосновенен |
+| `AndroidSingBoxCoreInfo` | `Libbox.version()` |
+| `ConnectionEventLog` | Кольцевой журнал событий (80 записей, 240 символов, редакция) в SharedPreferences `nothing_vpn_diagnostics` |
+| `SafeAndroidLog` | `Log.e` с редакцией; в release не пишет сообщение исключения |
+
+## Пакет `quicksettings/`
+- `VpnQuickTileService` — плитка вкл/выкл. Клик: если запущено → `requestDisconnect` + `disconnectSuspend`; если нужно разрешение VPN → тост и открытие `MainActivity`; иначе `requestConnect` + `connectSuspend` (ошибка → тост через `UserErrorText`). Слушает `VpnRunningStateContract` (динамически, с permission). Подзаголовок на Q+ показывает время работы в минутах.
+- `VpnQuickTileRefresh.requestUpdate` — `TileService.requestListeningState`.
+
+## Пакет `ui/` и `MainActivity.kt`
+
+`MainActivity` (≈1800 строк) делает всё: регистрация `ActivityResult`-контрактов (QR через `zxing-android-embedded`, запрос VPN-разрешения), ресивер `VPN_RUNNING_STATE` на `onStart/onStop`, `FLAG_SECURE` (не в debug), запрос `POST_NOTIFICATIONS`, навигация и **все экраны**.
+
+Навигация (`NavHost`, один общий `AppViewModel`):
+
+| Маршрут | Composable | Назначение |
+|---|---|---|
+| `home` | `HomeRoute` | Кнопка подключения, статистика, режим маршрутизации, список профилей (выбор, задержка, избранное, копия, поделиться, редактирование), «самый быстрый», импорт, QR, переходы |
+| `import` | `ImportRoute` | Ручной импорт `vless://` |
+| `profile/edit/{profileId}` | `ProfileEditRoute` | Редактирование профиля + проверка endpoint |
+| `apps` | `AppsRoute` | Выбор приложений для split tunneling: фильтры, массовый выбор, иконки (LRU-кэш), сохраняемые наборы |
+| `dns` | `DnsRoute` | System DNS / DoH, пресеты (Cloudflare, Google, Quad9, AdGuard), локальные домены, проверка доступности |
+| `dns/apps` | `DnsAppsRoute` | Приложения с системным DNS |
+| `settings` | `SettingsRoute` | Автозапуск, восстановление, недоверенный Wi-Fi, доверенные сети, health-check, переход в системные VPN-настройки (Kill Switch) |
+| `diagnostics` | `DiagnosticsRoute` | Состояние, версия, внешний IP (по кнопке), журнал, копирование/отправка отчёта |
+
+Вспомогательное: `TunnelStatsCard`, `SettingSwitch`, `AppPickerRow`, `AppPackageIcon`, `formatBytes/formatDuration/currentNetworkLabel`, `stateLabel`.
+
+`AppViewModel` — единственный ViewModel (создаётся фабрикой с `NothingVpnGraph`): прокси к `sessionController`/`profileRepository`/`appPreferences`, плюс прямые сетевые проверки (TCP-connect для задержки профиля/DNS/endpoint, HTTP-запрос внешнего IP на `api.ipify.org`), `findFastestProfile` (параллельные TCP-проверки), `switchActiveProfileAndReconnect`, сохранение split-tunnel и DNS-политики с `validate()` и флагами `*Saving`.
+
+`UserErrorText` — перевод кодов ошибок в строки (см. [glossary.md](glossary.md)); fallback по подстрокам (`tls`, `dns`, `timeout`, `tun`).
+
+## Тесты androidApp
+- `src/test`: `ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest` (JVM).
+- `src/androidTest`: `VpnLifecycleInstrumentationTest` (сброс running-флага при disconnect, константы action, `stopVpnAndAwait` в остановленном состоянии, замена секрета при upsert).
+
+## Сборка/ProGuard
+`proguard-rules.pro` сохраняет `io.nekohasekai.libbox.**`, native-методы, сериализаторы и `shared.domain/application`. `packaging.jniLibs.useLegacyPackaging = true`.
