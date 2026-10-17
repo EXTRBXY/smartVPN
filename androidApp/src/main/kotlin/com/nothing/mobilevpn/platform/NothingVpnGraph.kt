@@ -1,6 +1,7 @@
 package com.nothing.mobilecore.platform
 
 import android.content.Context
+import com.nothing.mobilecore.shared.application.ConnectivityProbePort
 import com.nothing.mobilecore.shared.application.SingBoxConfigCompilerPort
 import com.nothing.mobilecore.shared.application.VpnSessionController
 import com.nothing.mobilecore.shared.infrastructure.SingBoxConfigCompiler
@@ -18,6 +19,9 @@ class NothingVpnGraph(context: Context) {
     val systemVpn = AndroidSystemVpn(appContext, tunnelStatus)
     val sessionConfigWriter = AndroidSessionConfigWriter(appContext)
     val tunnelStatsMonitor = TunnelStatsMonitor(tunnelStatus.status)
+    val connectivityProbe: ConnectivityProbePort = AndroidConnectivityProbe()
+    val wifiInfo = WifiInfoProvider(appContext)
+    val eventLog = EventLogStore(appContext)
 
     val sessionController = VpnSessionController(
         profileRepository = profileRepository,

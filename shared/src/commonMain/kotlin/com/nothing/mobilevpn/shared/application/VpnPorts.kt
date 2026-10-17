@@ -48,3 +48,15 @@ interface SystemVpnPort {
     suspend fun smokeCheck(policy: TunnelPolicy): Result<Unit>
     fun vpnPermissionNeeded(): Boolean
 }
+
+/**
+ * Сетевые проверки для UI (задержка, внешний IP). Платформа выполняет их вне туннеля или
+ * через него — как получится по текущей маршрутизации.
+ *
+ * Важно: [tcpConnectLatency] — только время TCP-соединения с host:port. Это не проверка
+ * VLESS/Reality/TLS и не гарантия, что профиль рабочий.
+ */
+interface ConnectivityProbePort {
+    suspend fun tcpConnectLatency(host: String, port: Int): Result<Long>
+    suspend fun externalIp(): Result<String>
+}

@@ -23,9 +23,9 @@
 | application | `shared/.../application` | Порты (`VpnPorts.kt`), `VpnSessionController`, `SessionConfigWriter` |
 | infrastructure | `shared/.../infrastructure` | `SingBoxConfigCompiler`, `VlessLinkParser`, `VlessLinkFormatter`, `LogRedaction` |
 | platform | `androidApp/.../platform`, `.../libbox`, `.../vpn`, `.../quicksettings` | Реализации портов, `VpnService`, мост к libbox, автоматизация |
-| ui | `androidApp/.../ui`, `MainActivity.kt` | Compose-экраны, `AppViewModel`, тема, тексты ошибок |
+| ui | `androidApp/.../ui`, `MainActivity.kt` | Compose-экраны по пакетам, ViewModel на экран, навигация, тема, тексты ошибок |
 
-Отступления от идеала описаны в [tech-debt.md](tech-debt.md) (в частности, `AppViewModel` выполняет сетевые проверки и читает `AppPreferences` напрямую).
+Отступления от идеала описаны в [tech-debt.md](tech-debt.md) (в частности, часть ViewModel зависит от конкретных `AppPreferences`/`TunnelStatsMonitor`, а не от портов).
 
 ## Порты (shared/application/VpnPorts.kt)
 

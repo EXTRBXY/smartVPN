@@ -1,14 +1,10 @@
 package com.nothing.mobilecore.platform
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.net.wifi.WifiManager
-import androidx.core.content.ContextCompat
 import com.nothing.mobilecore.shared.domain.VpnSessionState
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import kotlinx.coroutines.CoroutineScope
@@ -67,14 +63,7 @@ class VpnAutomationCoordinator(
         ConnectionEventLog.add(app, "Disconnect requested: $source")
     }
 
-    fun currentWifiName(): String? {
-        if (ContextCompat.checkSelfPermission(app, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return null
-        }
-        @Suppress("DEPRECATION")
-        val raw = app.getSystemService(WifiManager::class.java)?.connectionInfo?.ssid
-        return raw?.removeSurrounding("\"")?.takeUnless { it.isBlank() || it == "<unknown ssid>" }
-    }
+    fun currentWifiName(): String? = graph.wifiInfo.currentSsid()
 
     private suspend fun maybeConnect(reason: String, fromBoot: Boolean = false): Unit = connectMutex.withLock {
         val settings = preferences.automation()

@@ -59,6 +59,9 @@ enum class VpnError(val code: String) {
     SmokeProxyFailed("smoke_proxy_failed"),
     SmokeTimeout("smoke_timeout"),
 
+    // Сетевые проверки из UI
+    ExternalIpFailed("external_ip_failed"),
+
     // Ошибки ядра sing-box, распознанные по тексту (см. [toVpnError])
     CoreTlsFailed("core_tls_failed"),
     CoreDnsFailed("core_dns_failed"),

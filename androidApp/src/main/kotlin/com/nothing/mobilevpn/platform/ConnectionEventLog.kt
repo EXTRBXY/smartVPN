@@ -32,3 +32,11 @@ object ConnectionEventLog {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).apply()
     }
 }
+
+/** Доступ к журналу событий без передачи Context в UI-слой. */
+class EventLogStore(context: Context) {
+    private val app = context.applicationContext
+
+    fun read(): List<String> = ConnectionEventLog.read(app)
+    fun clear() = ConnectionEventLog.clear(app)
+}

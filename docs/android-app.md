@@ -13,7 +13,7 @@
 | `BootCompletedReceiver` | `exported=true`, `BOOT_COMPLETED` и `MY_PACKAGE_REPLACED` |
 | `VpnQuickTileService` | `exported=true`, `BIND_QUICK_SETTINGS_TILE`, `QS_TILE` |
 
-Строки (русские) — `res/values/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Многие тексты в `MainActivity` захардкожены, а не вынесены в ресурсы.
+Строки (русские) — `res/values/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Многие тексты экранов в `ui/` всё ещё захардкожены, а не вынесены в ресурсы.
 
 ## Пакет `vpn/` — системный VPN
 
@@ -72,24 +72,33 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 
 ## Пакет `ui/` и `MainActivity.kt`
 
-`MainActivity` (≈1800 строк) делает всё: регистрация `ActivityResult`-контрактов (QR через `zxing-android-embedded`, запрос VPN-разрешения), `FLAG_SECURE` (не в debug), запрос `POST_NOTIFICATIONS`, навигация и **все экраны**.
+`MainActivity` (~90 строк) — только то, что требует Activity: тема, `AppNavGraph`, QR-сканер (`zxing-android-embedded`), запрос разрешения VPN, `FLAG_SECURE` (не в debug), запрос `POST_NOTIFICATIONS`.
 
-Навигация (`NavHost`, один общий `AppViewModel`):
+Структура `ui/`:
 
-| Маршрут | Composable | Назначение |
+| Пакет | Содержимое |
+|---|---|
+| `ui/navigation` | `AppNavGraph` — `NavHost`, маршруты, создание ViewModel экранов |
+| `ui/home` | `HomeScreen.kt` (`HomeRoute`, `TunnelStatsCard`, форматтеры, `stateLabel`, `currentNetworkLabel`), `HomeViewModel` |
+| `ui/profiles` | `ImportScreen` + `ImportViewModel` (ручной импорт и импорт из QR), `ProfileEditScreen` + `ProfileEditViewModel` |
+| `ui/apps` | `AppsScreen` + `SplitTunnelViewModel`, `AppPicker.kt` (`AppPickerRow`, `AppPackageIcon`, LRU-кэш иконок) |
+| `ui/dns` | `DnsScreen`, `DnsAppsScreen`, общий `DnsViewModel` |
+| `ui/settings` | `SettingsScreen` + `SettingsViewModel` |
+| `ui/diagnostics` | `DiagnosticsScreen` + `DiagnosticsViewModel` |
+| `ui/` | `AppViewModelFactory` (все ViewModel из `NothingVpnGraph`), `UserErrorText`, `NothingVpnTheme` |
+
+| Маршрут | Composable / ViewModel | Назначение |
 |---|---|---|
-| `home` | `HomeRoute` | Кнопка подключения, статистика, режим маршрутизации, список профилей (выбор, задержка, избранное, копия, поделиться, редактирование), «самый быстрый», импорт, QR, переходы |
-| `import` | `ImportRoute` | Ручной импорт `vless://` |
-| `profile/edit/{profileId}` | `ProfileEditRoute` | Редактирование профиля + проверка endpoint |
-| `apps` | `AppsRoute` | Выбор приложений для split tunneling: фильтры, массовый выбор, иконки (LRU-кэш), сохраняемые наборы |
-| `dns` | `DnsRoute` | System DNS / DoH, пресеты (Cloudflare, Google, Quad9, AdGuard), локальные домены, проверка доступности |
-| `dns/apps` | `DnsAppsRoute` | Приложения с системным DNS |
-| `settings` | `SettingsRoute` | Автозапуск, восстановление, недоверенный Wi-Fi, доверенные сети, health-check, переход в системные VPN-настройки (Kill Switch) |
-| `diagnostics` | `DiagnosticsRoute` | Состояние, версия, внешний IP (по кнопке), журнал, копирование/отправка отчёта |
+| `home` | `HomeRoute` / `HomeViewModel` | Кнопка подключения, статистика, режим маршрутизации, список профилей (выбор, задержка, избранное, копия, поделиться, редактирование), «самый быстрый», импорт, QR, переходы |
+| `import` | `ImportRoute` / `ImportViewModel` | Ручной импорт `vless://` |
+| `profile/edit/{profileId}` | `ProfileEditRoute` / `ProfileEditViewModel` | Редактирование профиля + проверка endpoint |
+| `apps` | `AppsRoute` / `SplitTunnelViewModel` | Выбор приложений для split tunneling: фильтры, массовый выбор, иконки, сохраняемые наборы |
+| `dns` | `DnsRoute` / `DnsViewModel` | System DNS / DoH, пресеты (Cloudflare, Google, Quad9, AdGuard), локальные домены, проверка доступности |
+| `dns/apps` | `DnsAppsRoute` / `DnsViewModel` | Приложения с системным DNS |
+| `settings` | `SettingsRoute` / `SettingsViewModel` | Автозапуск, восстановление, недоверенный Wi-Fi, доверенные сети, health-check, переход в системные VPN-настройки (Kill Switch) |
+| `diagnostics` | `DiagnosticsRoute` / `DiagnosticsViewModel` | Состояние, версия, внешний IP (по кнопке), журнал, копирование/отправка отчёта |
 
-Вспомогательное: `TunnelStatsCard`, `SettingSwitch`, `AppPickerRow`, `AppPackageIcon`, `formatBytes/formatDuration/currentNetworkLabel`, `stateLabel`.
-
-`AppViewModel` — единственный ViewModel (создаётся фабрикой с `NothingVpnGraph`): прокси к `sessionController`/`profileRepository`/`appPreferences`, плюс прямые сетевые проверки (TCP-connect для задержки профиля/DNS/endpoint, HTTP-запрос внешнего IP на `api.ipify.org`), `findFastestProfile` (параллельные TCP-проверки), `switchActiveProfileAndReconnect`, сохранение split-tunnel и DNS-политики с `validate()` и флагами `*Saving`.
+ViewModel не делают сетевых запросов и не трогают `Context`: проверки задержки и внешнего IP идут через `ConnectivityProbePort` (`platform/AndroidConnectivityProbe`), SSID — через `WifiInfoProvider`, журнал — через `EventLogStore`. `HomeViewModel` перечитывает активный профиль при любом изменении списка профилей (его меняют импорт, QR и удаление на других экранах). Список установленных приложений (`PackageManager`) пока загружается прямо в `AppsScreen`/`DnsAppsScreen`.
 
 `UserErrorText` — исчерпывающий перевод `VpnError` в строки `strings.xml` (см. [glossary.md](glossary.md)); классификация исключений — в `shared` (`toVpnError`).
 

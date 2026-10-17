@@ -54,6 +54,8 @@ object UserErrorText {
         VpnError.SmokeProxyFailed -> R.string.user_error_health_proxy
         VpnError.SmokeTimeout -> R.string.user_error_health_timeout
 
+        VpnError.ExternalIpFailed -> R.string.user_error_external_ip
+
         VpnError.CoreTlsFailed -> R.string.user_error_core_tls
         VpnError.CoreDnsFailed -> R.string.user_error_core_dns
         VpnError.CoreServerUnreachable -> R.string.user_error_core_unreachable

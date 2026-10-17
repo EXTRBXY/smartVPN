@@ -23,7 +23,7 @@ Android-first VPN-клиент для протокола **VLESS** (TLS / Realit
 
 ```
 ┌────────────────────────── androidApp ──────────────────────────┐
-│ ui/ + MainActivity   ──►  AppViewModel                         │
+│ ui/<экран> + MainActivity ──► ViewModel экрана                 │
 │                              │                                 │
 │ quicksettings/ ─────────────►│  NothingVpnGraph (ручной DI)    │
 │ BootCompletedReceiver ──► VpnAutomationCoordinator             │

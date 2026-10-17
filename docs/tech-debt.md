@@ -17,10 +17,12 @@
 - Часть кодов не имеет отдельного текста, часть текстов (`smoke_dns_failed`, `smoke_tcp_failed`) не порождается.
 - Рекомендация: sealed-иерархия `VpnError`/enum в `shared`, один маппер в UI.
 
-### 4. `MainActivity.kt` — 1838 строк
+### 4. ~~`MainActivity.kt` — 1838 строк~~ — сделано
+Экраны разнесены по `ui/<экран>/`, навигация — `ui/navigation/AppNavGraph`, ViewModel на экран, `MainActivity` ~90 строк. Остаток: загрузка списка приложений (`PackageManager`) прямо в `AppsScreen`/`DnsAppsScreen`; `HomeScreen`/`AppsScreen` по ~400 строк. Исходное описание:
 Все экраны, диалоги, кэш иконок, QR-лаунчер, ресивер и навигация в одном файле, функции `private`, один общий `AppViewModel`. Трудно тестировать и ревьюить. Разнести на `ui/<screen>/…Screen.kt` + отдельные ViewModel/состояния; навигацию вынести в `NavGraph`.
 
-### 5. Слои нарушены в `AppViewModel`
+### 5. ~~Слои нарушены в `AppViewModel`~~ — сделано
+Сетевые проверки — `ConnectivityProbePort` (`AndroidConnectivityProbe`), SSID — `WifiInfoProvider`, журнал — `EventLogStore`, QR-импорт — `ImportViewModel`. Остаток: `HomeViewModel`/`SettingsViewModel`/`SplitTunnelViewModel` зависят от конкретного `AppPreferences`. Исходное описание:
 ViewModel напрямую делает сокет-соединения (`testProfileLatency`, `testDnsEndpoint`, `testServerEndpoint`), HTTP-запрос внешнего IP, читает `AppPreferences`, комбинирует политику. По правилам проекта это должно быть портом (`ConnectivityProbePort`, `ExternalIpPort`) в `application` с реализацией в `platform`. `MainActivity` также напрямую вызывает `graph.profileRepository`/`sessionController` (QR-импорт).
 
 ### 6. Расхождение имён пакета и каталогов
@@ -60,7 +62,7 @@ ViewModel напрямую делает сокет-соединения (`testPr
 «Задержка» — TCP connect, не проверка VLESS/Reality; DNS-проверка — TCP на 443. В UI это подано как проверка, документация (README) это признаёт. Можно использовать `urlTest` ядра для активного профиля.
 
 ### 15. Тестовое покрытие
-Отсутствуют тесты: `NothingVpnService`, libbox-мост, `VpnAutomationCoordinator`, `AppViewModel`, UI (Compose), миграция. Единственный интеграционный набор — инструментальный и запускается на эмуляторе в CI. Начать с выноса логики решений (`maybeConnect`, `ProfileSecretIntegrity`-подобные) в чистые функции.
+Отсутствуют тесты: `NothingVpnService`, libbox-мост, `VpnAutomationCoordinator`, большинства ViewModel (есть `DnsViewModelTest`), UI (Compose), миграция. Единственный интеграционный набор — инструментальный и запускается на эмуляторе в CI. Начать с выноса логики решений (`maybeConnect`, `ProfileSecretIntegrity`-подобные) в чистые функции.
 
 ### 16. Локализация
 Русские строки смешаны: часть в `strings.xml`, большая часть захардкожена в `MainActivity`, `UserErrorText`, `VpnQuickTileService` (напр., «Отключение…», « · N мин»). Нет английской локали. Вынести всё в ресурсы.

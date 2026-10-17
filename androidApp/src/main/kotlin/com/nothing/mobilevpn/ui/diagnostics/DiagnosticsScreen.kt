@@ -1,0 +1,143 @@
+package com.nothing.mobilecore.ui.diagnostics
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import android.net.VpnService
+import android.os.Build
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.nothing.mobilecore.BuildConfig
+import com.nothing.mobilecore.ui.home.currentNetworkLabel
+import com.nothing.mobilecore.ui.home.stateLabel
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val state by vm.sessionState.collectAsState()
+    val stats by vm.tunnelStats.collectAsState()
+    var events by remember { mutableStateOf(vm.events()) }
+    var externalIp by rememberSaveable { mutableStateOf<String?>(null) }
+    var ipLoading by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val report = remember(state, stats, events, externalIp) {
+        buildString {
+            appendLine("Nothing Mobile ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT}")
+            appendLine("Устройство: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("VPN: ${stateLabel(state)}")
+            appendLine("Сеть: ${currentNetworkLabel(context)}")
+            appendLine("Разрешение VPN: ${if (VpnService.prepare(context) == null) "предоставлено" else "не предоставлено"}")
+            appendLine("Трафик: down=${stats.downloadTotal}, up=${stats.uploadTotal}, connections=${stats.activeConnections}")
+            appendLine("Внешний IP: ${externalIp ?: "не проверялся"}")
+            appendLine("События:")
+            events.forEach { appendLine(it) }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Диагностика") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Состояние: ${stateLabel(state)}")
+            Text("Версия: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            Text("Android ${Build.VERSION.RELEASE} · ${Build.MANUFACTURER} ${Build.MODEL}")
+            Text("Внешний IP: ${externalIp ?: "не проверялся"}")
+            Button(
+                onClick = {
+                    ipLoading = true
+                    scope.launch {
+                        externalIp = vm.externalIp().getOrElse { "не удалось определить" }
+                        ipLoading = false
+                    }
+                },
+                enabled = !ipLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (ipLoading) "Проверка…" else "Проверить внешний IP") }
+            Text("Секреты, UUID и содержимое профилей в отчёт не включаются.", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val clipboard = context.getSystemService(ClipboardManager::class.java)
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Nothing Mobile diagnostics", report))
+                        Toast.makeText(context, "Отчёт скопирован", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Копировать") }
+                Button(
+                    onClick = {
+                        context.startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, report)
+                                },
+                                "Передать отчёт",
+                            ),
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Поделиться") }
+            }
+            HorizontalDivider()
+            Text("Последние события", style = MaterialTheme.typography.labelLarge)
+            if (events.isEmpty()) Text("Событий пока нет", style = MaterialTheme.typography.bodySmall)
+            events.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (events.isNotEmpty()) {
+                TextButton(onClick = {
+                    vm.clearEvents()
+                    events = emptyList()
+                }) { Text("Очистить журнал") }
+            }
+        }
+    }
+
+}

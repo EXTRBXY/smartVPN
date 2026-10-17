@@ -48,7 +48,7 @@ AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compile
 | androidApp unit | `androidApp/src/test` | целостность секретов, жизненный цикл session-файлов |
 | androidApp instrumented | `androidApp/src/androidTest` | жизненный цикл VPN-флага, константы контрактов, замена секрета |
 
-Не покрыто тестами: `NothingVpnService`, `libbox/*`, UI, `VpnAutomationCoordinator`, `AppViewModel`, `ProfileRepositoryAndroid` (кроме инструментального сценария), `ProfileStorageMigration`.
+Не покрыто тестами: `NothingVpnService`, `libbox/*`, UI, `VpnAutomationCoordinator`, ViewModel экранов (кроме `DnsViewModelTest`), `ProfileRepositoryAndroid` (кроме инструментального сценария), `ProfileStorageMigration`.
 
 ## Ручная проверка перед релизом
 Подключение и отключение; смена Wi-Fi ↔ мобильная сеть; отключение из уведомления и плитки; QR-импорт; per-app режимы; DNS-исключения; поведение системной блокировки без VPN; автозапуск после перезагрузки (если включён); отозвать VPN из системных настроек.

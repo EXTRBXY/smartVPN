@@ -9,7 +9,7 @@ Android-first VPN-клиент (Kotlin) на ядре **sing-box** (встрое
 | Путь | Что там |
 |---|---|
 | `shared/` | KMP-модуль (`commonMain`): domain, application (порты + `VpnSessionController`), infrastructure (компилятор sing-box JSON, VLESS-парсер, редакция логов). Без Android-типов. |
-| `androidApp/` | Android-приложение: `vpn/` (VpnService), `libbox/` (мост к ядру), `platform/` (адаптеры портов, хранилище, автоматизация), `quicksettings/` (плитка), `ui/` + `MainActivity.kt` (Compose). |
+| `androidApp/` | Android-приложение: `vpn/` (VpnService), `libbox/` (мост к ядру), `platform/` (адаптеры портов, хранилище, автоматизация), `quicksettings/` (плитка), `ui/<экран>/` (Compose-экран + ViewModel), `ui/navigation/AppNavGraph`, `MainActivity.kt` (только Activity-специфичное). |
 | `androidApp/libs/libbox.aar` | Нативное ядро (gomobile). Собирается `scripts/build-libbox-aar.ps1`. |
 | `.cursor/rules/*.mdc` | Исходные инженерные правила проекта — **обязательны к соблюдению**, см. ниже. |
 | `docs/` | Документация (архитектура, жизненный цикл, безопасность, сборка, техдолг). |
@@ -62,7 +62,7 @@ Windows / PowerShell, JDK 17, из корня:
 - Ошибки — `enum VpnError` (`shared/domain/VpnError.kt`), бросаются через `ensure { }` / `vpnFail()`, любое исключение превращается в ошибку только через `toVpnError()`. Новый код = значение в enum + ветка в `ui/UserErrorText.kt` (исчерпывающий `when`, иначе не соберётся) + строка в `strings.xml`. Не сравнивай `exception.message` со строками.
 - Доступ к профилям/политике ждёт `ProfileStorageMigration.awaitProfileStorageReady()` — новые методы репозитория должны делать то же.
 - `failClosed=true` означает «одна попытка без ретраев», а не Android Kill Switch. Настройка `autoReconnect` в UI инвертирует это поле.
-- `MainActivity.kt` (~1800 строк) содержит почти все экраны; `AppViewModel` — единственный ViewModel, общий для всех маршрутов.
+- У каждого экрана своя ViewModel (создаётся `AppViewModelFactory` из графа). ViewModel не делают сеть и не держат `Context` — для этого порты/провайдеры графа (`ConnectivityProbePort`, `WifiInfoProvider`, `EventLogStore`).
 - Проверки «задержки» — это TCP connect, а не проверка VLESS/Reality/DNS.
 - Плитка (`VpnQuickTileService`) рисуется чистой функцией `TileModel.from(...)` от общего состояния — новые состояния добавляй туда и в `TileModelTest`.
 

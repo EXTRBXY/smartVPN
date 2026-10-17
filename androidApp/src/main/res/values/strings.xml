@@ -5,7 +5,6 @@
     <string name="vpn_notification_text">VPN подключён</string>
     <string name="action_disconnect">Отключить</string>
     <string name="qs_tile_label">Nothing Mobile</string>
-    <string name="qs_tile_subtitle_on">Включён</string>
     <string name="qs_tile_subtitle_off">Выключен</string>
     <string name="qs_tile_subtitle_on_minutes">Включён · %d мин</string>
     <string name="qs_tile_subtitle_connecting">Подключение…</string>
@@ -13,7 +12,9 @@
     <string name="qs_tile_no_profile">Нет профиля</string>
     <string name="qs_tile_no_profile_toast">Сначала добавьте профиль в приложении</string>
     <string name="qs_tile_need_vpn_permission">Откройте приложение и разрешите VPN</string>
-    <string name="qs_tile_per_app_empty">Укажите приложения для режима «только выбранные»</string>
+    <string name="qr_scan_prompt">Наведите камеру на QR-код профиля</string>
+    <string name="qr_import_success">Профиль импортирован</string>
+    <string name="qr_import_failed">QR-код не содержит корректный профиль</string>
     <string name="user_error_generic">Не удалось выполнить операцию. Повторите попытку.</string>
     <string name="user_error_select_profile">Сначала выберите активный профиль.</string>
     <string name="user_error_no_reachable_profile">Ни один профиль не ответил. Проверьте сеть.</string>
@@ -22,6 +23,7 @@
     <string name="user_error_vpn_start_failed">Не удалось запустить VPN. Попробуйте снова.</string>
     <string name="user_error_vpn_stop_failed">Не удалось корректно остановить VPN. Попробуйте снова.</string>
     <string name="user_error_tun_establish">Android не смог создать VPN-туннель. Проверьте разрешение VPN и наличие другого VPN-приложения.</string>
+    <string name="user_error_external_ip">Не удалось определить внешний IP.</string>
     <string name="user_error_core_tls">Не удалось установить защищённое соединение. Проверьте TLS/Reality и время на устройстве.</string>
     <string name="user_error_core_dns">Не удалось разрешить адрес. Проверьте настройки DNS.</string>
     <string name="user_error_core_unreachable">Сервер не отвечает. Проверьте сеть, адрес и порт профиля.</string>
