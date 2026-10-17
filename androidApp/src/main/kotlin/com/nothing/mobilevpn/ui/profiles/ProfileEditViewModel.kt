@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nothing.mobilecore.shared.application.ConnectivityProbePort
 import com.nothing.mobilecore.shared.application.ProfileRepositoryPort
-import com.nothing.mobilecore.shared.application.VpnSessionController
+import com.nothing.mobilecore.shared.application.ProfileService
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class ProfileEditViewModel(
-    private val controller: VpnSessionController,
+    private val profileService: ProfileService,
     profiles: ProfileRepositoryPort,
     private val probe: ConnectivityProbePort,
 ) : ViewModel() {
@@ -24,11 +24,11 @@ class ProfileEditViewModel(
     )
 
     fun updateProfile(profileId: String, draft: VlessProfile, onResult: (Result<Unit>) -> Unit) {
-        viewModelScope.launch { onResult(controller.updateProfileSuspend(profileId, draft)) }
+        viewModelScope.launch { onResult(profileService.update(profileId, draft)) }
     }
 
     fun deleteProfile(profileId: String, onResult: (Result<Unit>) -> Unit) {
-        viewModelScope.launch { onResult(controller.deleteProfileSuspend(profileId)) }
+        viewModelScope.launch { onResult(profileService.delete(profileId)) }
     }
 
     /** Время TCP-соединения с host:port из формы; не проверка VLESS/Reality. */

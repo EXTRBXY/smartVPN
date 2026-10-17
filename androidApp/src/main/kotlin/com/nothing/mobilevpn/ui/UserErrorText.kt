@@ -36,7 +36,7 @@ object UserErrorText {
 
         VpnError.PerAppRequiresPackages, VpnError.InvalidPackageName, VpnError.TooManyPackages ->
             R.string.user_error_split_tunnel_packages
-        VpnError.InvalidMtu, VpnError.InvalidTunIpv4Cidr, VpnError.InvalidTunStack, VpnError.InvalidSingBoxLogLevel ->
+        VpnError.InvalidMtu, VpnError.InvalidTunIpv4Cidr ->
             R.string.user_error_policy_network_params
         VpnError.InvalidDohServer, VpnError.InvalidDohPath -> R.string.user_error_doh_params
         VpnError.InvalidDohSniForIp -> R.string.user_error_doh_sni_for_ip

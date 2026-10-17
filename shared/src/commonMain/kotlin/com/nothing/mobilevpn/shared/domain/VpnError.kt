@@ -34,8 +34,6 @@ enum class VpnError(val code: String) {
     TooManyPackages("too_many_packages"),
     InvalidMtu("invalid_mtu"),
     InvalidTunIpv4Cidr("invalid_tun_ipv4_cidr"),
-    InvalidTunStack("invalid_tun_stack"),
-    InvalidSingBoxLogLevel("invalid_singbox_log_level"),
     InvalidDohServer("invalid_doh_server"),
     InvalidDohPath("invalid_doh_path"),
     InvalidDohSniForIp("invalid_doh_sni_for_ip"),

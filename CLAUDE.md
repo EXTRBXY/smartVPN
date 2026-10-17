@@ -61,7 +61,9 @@ Windows / PowerShell, JDK 17, из корня:
 - Истина о туннеле — `TunnelStatus` в `TunnelStatusRepository` (только память процесса, пишет только `NothingVpnService`). `VpnSessionState` контроллера — состояние UI-стороны, выравнивается по `TunnelStatus` подпиской внутри контроллера. Не сохраняй «running» на диск: после смерти процесса туннель гарантированно мёртв, а сохранённый флаг уже давал ложное «Вкл» на плитке. Промежуточный `Stopped` при reconnect — ожидаемый, не ошибка.
 - Ошибки — `enum VpnError` (`shared/domain/VpnError.kt`), бросаются через `ensure { }` / `vpnFail()`, любое исключение превращается в ошибку только через `toVpnError()`. Новый код = значение в enum + ветка в `ui/UserErrorText.kt` (исчерпывающий `when`, иначе не соберётся) + строка в `strings.xml`. Не сравнивай `exception.message` со строками.
 - Доступ к профилям/политике ждёт `ProfileStorageMigration.awaitProfileStorageReady()` — новые методы репозитория должны делать то же.
-- `failClosed=true` означает «одна попытка без ретраев», а не Android Kill Switch. Настройка `autoReconnect` в UI инвертирует это поле.
+- `TunnelPolicy.singleConnectAttempt` (в JSON — `failClosed`) — «одна попытка без повторов», а не Android Kill Switch. Переключатель «Восстанавливать соединение» пишет и `autoReconnect`, и `singleConnectAttempt = !enabled` — только в `SettingsViewModel`.
+- Строковые поля domain — enum с `wire`-строкой (`WireEnums.kt`) и мягким сериализатором: JSON в хранилище не меняется, неизвестное значение читается как fallback. Меняя enum, не трогай `wire` существующих значений и прогоняй `StorageCompatibilityTest`; id профиля считается от `wire`.
+- Операции с профилями — `ProfileService`; `VpnSessionController` — только сессия.
 - У каждого экрана своя ViewModel (создаётся `AppViewModelFactory` из графа). ViewModel не делают сеть и не держат `Context` — для этого порты/провайдеры графа (`ConnectivityProbePort`, `WifiInfoProvider`, `EventLogStore`).
 - Проверки «задержки» — это TCP connect, а не проверка VLESS/Reality/DNS.
 - Плитка (`VpnQuickTileService`) рисуется чистой функцией `TileModel.from(...)` от общего состояния — новые состояния добавляй туда и в `TileModelTest`.

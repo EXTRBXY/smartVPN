@@ -1,14 +1,16 @@
 package com.nothing.mobilecore.shared.infrastructure
 
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.ensure
 
 object VlessLinkFormatter {
     fun format(profile: VlessProfile): String {
-        require(profile.uuid.isNotBlank()) { "profile_secret_unavailable" }
+        ensure(profile.uuid.isNotBlank()) { VpnError.ProfileSecretUnavailable }
         val query = linkedMapOf<String, String>()
-        query["encryption"] = profile.encryption
-        query["security"] = profile.security
-        query["type"] = profile.type
+        query["encryption"] = profile.encryption.wire
+        query["security"] = profile.security.wire
+        query["type"] = profile.type.wire
         profile.sni?.let { query["sni"] = it }
         profile.fingerprint?.let { query["fp"] = it }
         profile.flow?.let { query["flow"] = it }

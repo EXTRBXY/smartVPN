@@ -33,14 +33,17 @@ ViewModel напрямую делает сокет-соединения (`testPr
 ### 7. Глобальные синглтоны с изменяемым состоянием
 `LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener`, `ProfileStorageMigration`, `ConnectionEventLog`, `LibboxProxyProbe`. Нет внедрения зависимостей (ручной `NothingVpnGraph`, сервис его не использует). Для тестов сервис/мониторы недоступны. Рассмотреть Hilt/Koin или явную передачу через `Graph`; `NothingVpnService` получает политику сериализованной в `Intent`.
 
-### 8. `VpnSessionController` создаёт собственный scope и содержит смесь ответственностей
+### 8. ~~`VpnSessionController` создаёт собственный scope и содержит смесь ответственностей~~ — сделано
+Профили вынесены в `ProfileService`, `dispatcher`/`scope` внедряются. `AndroidSystemVpn` по-прежнему жёстко использует `Main.immediate`/`IO`. Исходное описание:
 Подключение, CRUD профилей, нормализация/валидация профиля, синхронизация внешнего состояния, версия ядра. Dispatchers (`Dispatchers.Default`, `Main.immediate` в `AndroidSystemVpn`) жёстко зашиты — нельзя подставить тестовый. Разделить `ConnectUseCase`, `ProfileUseCases`, инжектировать `CoroutineDispatcher`/`CoroutineScope`.
 
-### 9. Типизация domain
+### 9. ~~Типизация domain~~ — сделано (кроме имени `allowedPackageNames`)
+Enum с мягким сериализатором (`WireEnums.kt`), единый `VlessUuid` (v1–8), поле security в форме — выбор из вариантов. Остаток: имя `allowedPackageNames`. Исходное описание:
 `VlessProfile.type/security/encryption`, `TunnelPolicy.tunStack/singBoxLogLevel` — строки с проверками в разных местах (`validate`, парсер, компилятор, `normalizeProfileForSave`). Заменить `enum class`/value-классами; сейчас проверка UUID дублируется в `VpnSessionController` (версии 1–5) и `VlessLinkParser` (1–8).
 Имя поля `allowedPackageNames` вводит в заблуждение для режима `PER_APP_EXCLUDED`.
 
-### 10. Семантика `failClosed`
+### 10. ~~Семантика `failClosed`~~ — сделано
+Свойство переименовано в `singleConnectAttempt` (ключ JSON прежний), связь с `autoReconnect` — в одном месте (`SettingsViewModel`). Разнести на два переключателя в UI — продуктовое решение, не сделано. Исходное описание:
 Название намекает на Kill Switch, фактически — «без ретраев». UI-переключатель «Восстанавливать соединение» пишет в него `!enabled`, дублируя флаг `autoReconnect` в `AppPreferences` — два источника для двух связанных, но разных вещей (ретраи подключения vs. восстановление после сбоя). Переименовать/разделить.
 
 ### 11. Политика туннеля глобальна и размазана по хранилищам

@@ -1,5 +1,7 @@
 package com.nothing.mobilecore.shared.infrastructure
 
+import com.nothing.mobilecore.shared.domain.VlessSecurity
+import com.nothing.mobilecore.shared.domain.VlessTransport
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnException
 import kotlin.test.Test
@@ -16,10 +18,12 @@ class VlessLinkParserTest {
         assertEquals("example.com", p.host)
         assertEquals(443, p.port)
         assertEquals("12345678-1234-4123-8123-123456789abc", p.uuid)
-        assertEquals("tcp", p.type)
-        assertEquals("tls", p.security)
+        assertEquals(VlessTransport.TCP, p.type)
+        assertEquals(VlessSecurity.TLS, p.security)
         assertEquals("Test", p.name)
-        assertTrue(p.id.isNotBlank())
+        // id получен прежним алгоритмом, когда type/security были строками: переход на enum
+        // не должен менять id, иначе повторный импорт создаст дубликат профиля.
+        assertEquals("818942c831d3a2a0", p.id)
     }
 
     @Test
@@ -28,7 +32,7 @@ class VlessLinkParserTest {
             "vless://12345678-1234-4123-8123-123456789abc@example.com:443" +
                 "?type=tcp&security=reality&encryption=none&pbk=aaa&sid=bbb&sni=real.example#r"
         val p = VlessLinkParser.parse(link)
-        assertEquals("reality", p.security)
+        assertEquals(VlessSecurity.REALITY, p.security)
         assertEquals("aaa", p.realityPublicKey)
         assertEquals("bbb", p.realityShortId)
         assertEquals("real.example", p.sni)

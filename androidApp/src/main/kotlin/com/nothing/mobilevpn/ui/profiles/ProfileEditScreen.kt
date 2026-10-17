@@ -2,6 +2,7 @@ package com.nothing.mobilecore.ui.profiles
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.nothing.mobilecore.R
+import com.nothing.mobilecore.shared.domain.VlessSecurity
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.ui.UserErrorText
 import kotlinx.coroutines.launch
@@ -139,21 +142,24 @@ internal fun ProfileEditRoute(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            OutlinedTextField(
-                value = security,
-                onValueChange = { security = it },
-                label = { Text("Security (tls/reality)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            OutlinedTextField(
+            Text("Security", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                VlessSecurity.entries.forEach { option ->
+                    FilterChip(
+                        selected = security == option,
+                        onClick = { security = option },
+                        label = { Text(option.wire) },
+                    )
+                }
+            }
+            if (security == VlessSecurity.REALITY) OutlinedTextField(
                 value = realityPublicKey,
                 onValueChange = { realityPublicKey = it },
                 label = { Text("Reality Public Key") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            OutlinedTextField(
+            if (security == VlessSecurity.REALITY) OutlinedTextField(
                 value = realityShortId,
                 onValueChange = { realityShortId = it },
                 label = { Text("Reality Short ID") },

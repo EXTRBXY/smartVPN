@@ -3,6 +3,8 @@ package com.nothing.mobilecore.shared.infrastructure
 import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VlessSecurity
+import com.nothing.mobilecore.shared.domain.VlessTransport
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -14,8 +16,8 @@ class SingBoxConfigCompilerTest {
         uuid = "12345678-1234-4123-8123-123456789abc",
         host = "example.com",
         port = 443,
-        type = "tcp",
-        security = "tls",
+        type = VlessTransport.TCP,
+        security = VlessSecurity.TLS,
         sni = "example.com",
     )
     private val policy = TunnelPolicy(
@@ -37,7 +39,7 @@ class SingBoxConfigCompilerTest {
 
     @Test
     fun compile_failsForRealityWithoutKeys() {
-        val realityProfile = profile.copy(security = "reality", realityPublicKey = null, realityShortId = null)
+        val realityProfile = profile.copy(security = VlessSecurity.REALITY, realityPublicKey = null, realityShortId = null)
         val result = SingBoxConfigCompiler().compile(realityProfile, policy)
         assertFalse(result.isSuccess)
     }

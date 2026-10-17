@@ -19,12 +19,16 @@ class SettingsViewModel(
 
     fun setAutoStart(enabled: Boolean) = preferences.setAutoStart(enabled)
 
-    /** «Восстанавливать соединение»: также переключает ретраи подключения (`failClosed = !enabled`). */
+    /**
+     * Один переключатель «Восстанавливать соединение» управляет двумя настройками: переподключением
+     * автоматизации после потери сети/сбоя проверки и повторами при подключении
+     * (`singleConnectAttempt = !enabled`). Связь осознанная и живёт только здесь.
+     */
     fun setAutoReconnect(enabled: Boolean) {
         preferences.setAutoReconnect(enabled)
         viewModelScope.launch {
             val policy = profiles.getTunnelPolicy()
-            profiles.setTunnelPolicy(policy.copy(failClosed = !enabled))
+            profiles.setTunnelPolicy(policy.copy(singleConnectAttempt = !enabled))
         }
     }
 

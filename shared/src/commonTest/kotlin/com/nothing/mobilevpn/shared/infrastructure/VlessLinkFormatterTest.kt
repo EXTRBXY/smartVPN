@@ -1,6 +1,8 @@
 package com.nothing.mobilecore.shared.infrastructure
 
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VlessSecurity
+import com.nothing.mobilecore.shared.domain.VlessTransport
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -14,8 +16,8 @@ class VlessLinkFormatterTest {
             uuid = "12345678-1234-4123-8123-123456789abc",
             host = "example.com",
             port = 443,
-            type = "ws",
-            security = "tls",
+            type = VlessTransport.WS,
+            security = VlessSecurity.TLS,
             sni = "example.com",
             wsPath = "/vpn?token=a+b&mode=1",
             wsHost = "cdn.example.com",

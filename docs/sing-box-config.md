@@ -6,7 +6,7 @@
 
 ```jsonc
 {
-  "log":      { "level": "<policy.singBoxLogLevel>" },
+  "log":      { "level": "<policy.singBoxLogLevel.wire>" },
   "dns":      { ... },                 // см. ниже
   "inbounds": [ { "type": "tun", "tag": "tun-in", ... } ],
   "outbounds": [ vless "proxy-node", selector "proxy", direct "direct", block "block" ],
@@ -44,7 +44,7 @@
 |---|---|
 | `tunIpv4Cidr`, `mtu`, `tunStack`, `singBoxLogLevel`, DNS | JSON |
 | `routingMode`, `allowedPackageNames` | `OverrideOptions` (`includePackage` / `excludePackage`) |
-| `failClosed` | `VpnSessionController` (ретраи), не ядро |
+| `singleConnectAttempt` | `VpnSessionController` (повторы), не ядро |
 | DoH/локальные DNS | JSON + `LocalResolver` (локальный резолвер через `DnsResolver` Android) |
 
 ## Что учесть при изменениях

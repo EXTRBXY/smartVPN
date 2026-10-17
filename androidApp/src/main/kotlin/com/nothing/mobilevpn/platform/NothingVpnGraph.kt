@@ -2,6 +2,7 @@ package com.nothing.mobilecore.platform
 
 import android.content.Context
 import com.nothing.mobilecore.shared.application.ConnectivityProbePort
+import com.nothing.mobilecore.shared.application.ProfileService
 import com.nothing.mobilecore.shared.application.SingBoxConfigCompilerPort
 import com.nothing.mobilecore.shared.application.VpnSessionController
 import com.nothing.mobilecore.shared.infrastructure.SingBoxConfigCompiler
@@ -31,4 +32,5 @@ class NothingVpnGraph(context: Context) {
         configWriter = sessionConfigWriter,
         eventLog = { ConnectionEventLog.add(appContext, it) },
     )
+    val profileService = ProfileService(profileRepository, isTunnelBusy = { sessionController.isBusy })
 }

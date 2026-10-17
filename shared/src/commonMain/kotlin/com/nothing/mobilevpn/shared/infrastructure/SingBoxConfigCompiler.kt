@@ -1,5 +1,7 @@
 package com.nothing.mobilecore.shared.infrastructure
 
+import com.nothing.mobilecore.shared.domain.VlessSecurity
+import com.nothing.mobilecore.shared.domain.VlessTransport
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.ensure
 import com.nothing.mobilecore.shared.domain.vpnFail
@@ -23,16 +25,16 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
 
     override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = runCatching {
         val json = buildJsonObject {
-            put("log", buildJsonObject { put("level", JsonPrimitive(policy.singBoxLogLevel)) })
+            put("log", buildJsonObject { put("level", JsonPrimitive(policy.singBoxLogLevel.wire)) })
             buildDns(policy)?.let { put("dns", it) }
-            put("inbounds", buildJsonArray { add(buildTunInbound(profile, policy)) })
+            put("inbounds", buildJsonArray { add(buildTunInbound(policy)) })
             put("outbounds", buildOutbounds(profile))
             put("route", buildRoute())
         }
         format.encodeToString(JsonElement.serializer(), json)
     }
 
-    private fun buildTunInbound(profile: VlessProfile, policy: TunnelPolicy): JsonObject =
+    private fun buildTunInbound(policy: TunnelPolicy): JsonObject =
         buildJsonObject {
             put("type", JsonPrimitive("tun"))
             put("tag", JsonPrimitive("tun-in"))
@@ -41,8 +43,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
             // Android + libbox: маршруты и DNS приходят в TunOptions для VpnService.Builder (как в SFA).
             put("auto_route", JsonPrimitive(true))
             put("strict_route", JsonPrimitive(true))
-            val stack = policy.tunStack.trim().lowercase().ifEmpty { "mixed" }
-            put("stack", JsonPrimitive(stack))
+            put("stack", JsonPrimitive(policy.tunStack.wire))
         }
 
     private fun buildOutbounds(profile: VlessProfile): JsonArray = buildJsonArray {
@@ -77,7 +78,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
     }
 
     private fun buildTls(profile: VlessProfile): JsonObject? {
-        if (profile.security == "none") return null
+        if (profile.security == VlessSecurity.NONE) return null
         val serverName = profile.sni?.ifBlank { null } ?: profile.host
         return buildJsonObject {
             put("enabled", JsonPrimitive(true))
@@ -91,7 +92,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
                     put("fingerprint", JsonPrimitive(fp))
                 })
             }
-            if (profile.security == "reality") {
+            if (profile.security == VlessSecurity.REALITY) {
                 val publicKey = profile.realityPublicKey?.takeIf { it.isNotBlank() }
                     ?: vpnFail(VpnError.ProfileRealityIncomplete)
                 val shortId = profile.realityShortId?.takeIf { it.isNotBlank() }
@@ -107,19 +108,18 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
 
     private fun buildTransport(profile: VlessProfile): JsonObject? =
         when (profile.type) {
-            "tcp" -> null
-            "ws" -> buildJsonObject {
+            VlessTransport.TCP -> null
+            VlessTransport.WS -> buildJsonObject {
                 put("type", JsonPrimitive("ws"))
                 put("path", JsonPrimitive(profile.wsPath ?: "/"))
                 profile.wsHost?.let { host ->
                     put("headers", buildJsonObject { put("Host", JsonPrimitive(host)) })
                 }
             }
-            "grpc" -> buildJsonObject {
+            VlessTransport.GRPC -> buildJsonObject {
                 put("type", JsonPrimitive("grpc"))
                 put("service_name", JsonPrimitive(profile.grpcServiceName ?: "default"))
             }
-            else -> null
         }
 
     private fun buildDns(policy: TunnelPolicy): JsonObject? =

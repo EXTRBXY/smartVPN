@@ -31,7 +31,7 @@ class VpnSessionControllerRecoveryTest {
         )
         val repo = FakeProfileRepository(
             profile,
-            TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = true),
+            TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = true),
         )
         val compiler = object : SingBoxConfigCompilerPort {
             override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
@@ -65,7 +65,7 @@ class VpnSessionControllerRecoveryTest {
             host = "example.com",
             port = 443,
         )
-        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = false))
+        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = false))
         val compiler = object : SingBoxConfigCompilerPort {
             override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
         }
@@ -112,7 +112,7 @@ class VpnSessionControllerRecoveryTest {
             host = "example.com",
             port = 443,
         )
-        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = false))
+        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = false))
         val compiler = object : SingBoxConfigCompilerPort {
             override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
         }
@@ -127,7 +127,7 @@ class VpnSessionControllerRecoveryTest {
     }
 
     @Test
-    fun connectSuspend_failClosedStopsAfterFirstFailure() = runBlocking {
+    fun connectSuspend_singleAttemptStopsAfterFirstFailure() = runBlocking {
         val profile = VlessProfile(
             id = "p1",
             name = "test",
@@ -135,7 +135,7 @@ class VpnSessionControllerRecoveryTest {
             host = "example.com",
             port = 443,
         )
-        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = true))
+        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = true))
         val compiler = object : SingBoxConfigCompilerPort {
             override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
         }
@@ -158,7 +158,7 @@ class VpnSessionControllerRecoveryTest {
             host = "example.com",
             port = 443,
         )
-        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = false))
+        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = false))
         val compiler = object : SingBoxConfigCompilerPort {
             override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
         }
@@ -183,7 +183,7 @@ class VpnSessionControllerRecoveryTest {
             host = "example.com",
             port = 443,
         )
-        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = false))
+        val repo = FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = false))
         val compiler = object : SingBoxConfigCompilerPort {
             override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
         }
@@ -197,85 +197,6 @@ class VpnSessionControllerRecoveryTest {
         assertTrue(result.isSuccess)
         assertEquals(1, systemVpn.stopAwaitCalls)
         assertEquals(VpnSessionState.Disconnected, ctrl.state.value)
-    }
-
-    @Test
-    fun deleteProfileSuspend_blocksDeletingActiveWhileConnected() = runBlocking {
-        val profile = VlessProfile(
-            id = "p1",
-            name = "test",
-            uuid = "12345678-1234-4123-8123-123456789abc",
-            host = "example.com",
-            port = 443,
-        )
-        val repo = FakeProfileRepository(profile)
-        val compiler = object : SingBoxConfigCompilerPort {
-            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
-        }
-        val systemVpn = FakeSystemVpn(failStartTimes = 0)
-        val writer = SessionConfigWriter { "/tmp/session.json" }
-        val ctrl = VpnSessionController(repo, compiler, SingBoxCoreInfoPort { "1.0.0" }, systemVpn, writer)
-        ctrl.connectSuspend()
-
-        val result = ctrl.deleteProfileSuspend("p1")
-
-        assertTrue(result.isFailure)
-        assertEquals("profile_delete_requires_disconnect", result.exceptionOrNull()?.message)
-        assertEquals(1, repo.listProfiles().size)
-    }
-
-    @Test
-    fun deleteProfileSuspend_clearsActiveIdWhenDisconnected() = runBlocking {
-        val profile = VlessProfile(
-            id = "p1",
-            name = "test",
-            uuid = "12345678-1234-4123-8123-123456789abc",
-            host = "example.com",
-            port = 443,
-        )
-        val repo = FakeProfileRepository(profile)
-        val compiler = object : SingBoxConfigCompilerPort {
-            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
-        }
-        val systemVpn = FakeSystemVpn(failStartTimes = 0)
-        val writer = SessionConfigWriter { "/tmp/session.json" }
-        val ctrl = VpnSessionController(repo, compiler, SingBoxCoreInfoPort { "1.0.0" }, systemVpn, writer)
-
-        val result = ctrl.deleteProfileSuspend("p1")
-
-        assertTrue(result.isSuccess)
-        assertTrue(repo.listProfiles().isEmpty())
-        assertNull(repo.getActiveProfileId())
-    }
-
-    @Test
-    fun updateProfileSuspend_updatesFieldsWithoutChangingId() = runBlocking {
-        val profile = VlessProfile(
-            id = "p1",
-            name = "test",
-            uuid = "12345678-1234-4123-8123-123456789abc",
-            host = "example.com",
-            port = 443,
-        )
-        val repo = FakeProfileRepository(profile)
-        val compiler = object : SingBoxConfigCompilerPort {
-            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
-        }
-        val systemVpn = FakeSystemVpn(failStartTimes = 0)
-        val writer = SessionConfigWriter { "/tmp/session.json" }
-        val ctrl = VpnSessionController(repo, compiler, SingBoxCoreInfoPort { "1.0.0" }, systemVpn, writer)
-
-        val result = ctrl.updateProfileSuspend(
-            profileId = "p1",
-            draft = profile.copy(name = "updated", host = "new.example.com", port = 8443),
-        )
-
-        assertTrue(result.isSuccess)
-        val updated = repo.listProfiles().single()
-        assertEquals("p1", updated.id)
-        assertEquals("updated", updated.name)
-        assertEquals("new.example.com", updated.host)
-        assertEquals(8443, updated.port)
     }
 
     @Test
@@ -353,7 +274,7 @@ class VpnSessionControllerRecoveryTest {
             override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
         }
         return VpnSessionController(
-            FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = true)),
+            FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = true)),
             compiler,
             SingBoxCoreInfoPort { "1.0.0" },
             systemVpn,
@@ -365,9 +286,9 @@ class VpnSessionControllerRecoveryTest {
         withTimeout(2_000) { ctrl.state.first { it == expected } }
     }
 
-    private class FakeProfileRepository(
+    internal class FakeProfileRepository(
         private val profile: VlessProfile,
-        initialPolicy: TunnelPolicy = TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = false),
+        initialPolicy: TunnelPolicy = TunnelPolicy(routingMode = RoutingMode.FULL_TUN, singleConnectAttempt = false),
     ) : ProfileRepositoryPort {
         private val profilesFlow = MutableStateFlow(listOf(profile))
         private var policy = initialPolicy

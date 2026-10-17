@@ -1,15 +1,16 @@
 package com.nothing.mobilecore.shared.infrastructure
 
+import com.nothing.mobilecore.shared.domain.VlessEncryption
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VlessSecurity
+import com.nothing.mobilecore.shared.domain.VlessTransport
+import com.nothing.mobilecore.shared.domain.VlessUuid
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.ensure
 import com.nothing.mobilecore.shared.domain.vpnFail
 import okio.ByteString.Companion.toByteString
 
 object VlessLinkParser {
-    private val uuidRegex =
-        Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-
     fun parse(link: String): VlessProfile {
         ensure(link.isNotBlank()) { VpnError.LinkInvalid }
         ensure(link.trim().startsWith("vless://", ignoreCase = true)) { VpnError.LinkNotVless }
@@ -17,7 +18,7 @@ object VlessLinkParser {
         ensure(uri.scheme.equals("vless", ignoreCase = true)) { VpnError.LinkNotVless }
 
         val userInfo = uri.userInfo ?: vpnFail(VpnError.LinkInvalidUuid)
-        ensure(uuidRegex.matches(userInfo)) { VpnError.LinkInvalidUuid }
+        ensure(VlessUuid.isValid(userInfo)) { VpnError.LinkInvalidUuid }
         val host = uri.host?.takeIf { it.isNotBlank() } ?: vpnFail(VpnError.LinkInvalidHostOrPort)
         val port = if (uri.port >= 0) uri.port else vpnFail(VpnError.LinkInvalidHostOrPort)
         ensure(port in 1..65535) { VpnError.LinkInvalidHostOrPort }
@@ -26,12 +27,10 @@ object VlessLinkParser {
         val name = if (rawFragment.isNullOrBlank()) "$host:$port" else decodeUrl(rawFragment)
 
         val query = parseQuery(uri.query)
-        val type = (query["type"] ?: "tcp").trim().lowercase()
-        val security = (query["security"] ?: "tls").trim().lowercase()
-        val encryption = (query["encryption"] ?: "none").trim().lowercase()
-        ensure(type.isNotEmpty()) { VpnError.LinkUnsupported }
-        ensure(security.isNotEmpty()) { VpnError.LinkUnsupported }
-        ensure(encryption.isNotEmpty()) { VpnError.LinkUnsupported }
+        val type = VlessTransport.parse(query["type"] ?: VlessTransport.TCP.wire) ?: vpnFail(VpnError.LinkUnsupported)
+        val security = VlessSecurity.parse(query["security"] ?: VlessSecurity.TLS.wire) ?: vpnFail(VpnError.LinkUnsupported)
+        val encryption = VlessEncryption.parse(query["encryption"] ?: VlessEncryption.NONE.wire)
+            ?: vpnFail(VpnError.LinkUnsupported)
 
         val fingerprint = query["fp"]?.trim()?.takeIf { it.isNotEmpty() }
         val sni = query["sni"] ?: query["serverName"] ?: query["servername"]
@@ -54,10 +53,7 @@ object VlessLinkParser {
             if (!isKnownKey(k)) extra[k] = v
         }
 
-        ensure(encryption == "none") { VpnError.LinkUnsupported }
-        ensure(security in setOf("tls", "reality", "none")) { VpnError.LinkUnsupported }
-        ensure(type in setOf("tcp", "ws", "grpc")) { VpnError.LinkUnsupported }
-        if (security == "reality") {
+        if (security == VlessSecurity.REALITY) {
             ensure(pbk != null) { VpnError.LinkRealityIncomplete }
             ensure(sid != null) { VpnError.LinkRealityIncomplete }
             ensure(sniTrim != null) { VpnError.LinkRealityIncomplete }
@@ -198,7 +194,7 @@ object VlessLinkParser {
     }
 
     private fun stableId(p: VlessProfile): String {
-        val key = "${p.uuid}|${p.host}|${p.port}|${p.type}|${p.security}|${p.sni}|${p.flow}|${p.wsPath}|${p.wsHost}|${p.grpcServiceName}"
+        val key = "${p.uuid}|${p.host}|${p.port}|${p.type.wire}|${p.security.wire}|${p.sni}|${p.flow}|${p.wsPath}|${p.wsHost}|${p.grpcServiceName}"
         val hash = key.encodeToByteArray().toByteString().sha256().hex()
         return hash.take(16).lowercase()
     }

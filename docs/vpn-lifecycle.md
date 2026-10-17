@@ -48,9 +48,9 @@ UI: vm.connect()                       (connectionRequested = true)
 Разрешение VPN (`VpnService.prepare`) запрашивает только Activity (`onPrepareVpnAndConnect`); плитка и автоматизация при его отсутствии отказываются (тост / запись в журнал).
 
 ### Повторы
-- `failClosed=true` (по умолчанию): 1 попытка.
-- `failClosed=false`: до 3 попыток, состояние `Recovering(attempt, 3)`, паузы 1 с, 2 с. Между попытками вызывается `stopVpn()`.
-- В UI переключатель «Восстанавливать соединение» (`setAutoReconnect`) также записывает `failClosed = !enabled`.
+- `singleConnectAttempt=true` (по умолчанию; ключ в JSON — `failClosed`): 1 попытка.
+- `singleConnectAttempt=false`: до 3 попыток, состояние `Recovering(attempt, 3)`, паузы 1 с, 2 с. Между попытками вызывается `stopVpn()`.
+- В UI переключатель «Восстанавливать соединение» (`setAutoReconnect`) также записывает `singleConnectAttempt = !enabled` (связь двух настроек осознанная и живёт только в `SettingsViewModel`).
 
 ### Таймауты
 | Операция | Таймаут | Код ошибки |
@@ -91,7 +91,7 @@ UI: vm.connect()                       (connectionRequested = true)
 
 ## Что значит «Kill Switch»
 
-Приложение **не** реализует системный Kill Switch. `failClosed` — только политика ретраев. Строгая блокировка включается пользователем в Android («Always-on VPN» + «Block connections without VPN»); экран настроек даёт переход и инструкцию.
+Приложение **не** реализует системный Kill Switch. `singleConnectAttempt` — только политика повторов подключения. Строгая блокировка включается пользователем в Android («Always-on VPN» + «Block connections without VPN»); экран настроек даёт переход и инструкцию.
 
 ## Известные особенности
 - `VpnBoxHandler.serviceReload()` читает `sessionConfigPath`, который после старта всегда `null` (файл удалён до запуска ядра) — reload по запросу ядра фактически не выполняется. Отражено в [tech-debt.md](tech-debt.md).

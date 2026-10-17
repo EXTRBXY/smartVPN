@@ -25,7 +25,7 @@ UUID профиля и параметры Reality (`pbk`, `sid`); адрес с�
 
 ## Ограничения и риски (известные)
 
-- **Утечки вне туннеля**: Kill Switch системный и включается пользователем; `failClosed` его не заменяет.
+- **Утечки вне туннеля**: Kill Switch системный и включается пользователем; `singleConnectAttempt` (бывш. `failClosed`) его не заменяет.
 - **Внешний IP**: запрос `https://api.ipify.org` выполняется только по кнопке; smoke-check обращается к `gstatic.com`.
 - **`QUERY_ALL_PACKAGES`**: допустим только при личном/внутреннем распространении (Google Play потребует обоснования).
 - **`ACCESS_FINE_LOCATION`**: нужен для SSID Wi-Fi и `NeedWIFIState`; без него сессия с правилами по Wi-Fi падает (`wifi_state_needs_fine_location`).

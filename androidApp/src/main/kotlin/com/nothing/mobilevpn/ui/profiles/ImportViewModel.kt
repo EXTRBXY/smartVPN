@@ -2,8 +2,7 @@ package com.nothing.mobilecore.ui.profiles
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nothing.mobilecore.shared.application.ProfileRepositoryPort
-import com.nothing.mobilecore.shared.application.VpnSessionController
+import com.nothing.mobilecore.shared.application.ProfileService
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,8 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class ImportViewModel(
-    private val controller: VpnSessionController,
-    private val profiles: ProfileRepositoryPort,
+    private val profileService: ProfileService,
 ) : ViewModel() {
 
     private val _importInProgress = MutableStateFlow(false)
@@ -24,7 +22,7 @@ class ImportViewModel(
         _importInProgress.value = true
         viewModelScope.launch {
             try {
-                onResult(runCatching { controller.importVlessLink(link).getOrThrow().also { profiles.upsert(it) } })
+                onResult(profileService.importLink(link, activate = false))
             } finally {
                 _importInProgress.value = false
             }
@@ -33,15 +31,6 @@ class ImportViewModel(
 
     /** Импорт из QR-кода: профиль сохраняется и сразу становится активным. */
     fun importAndActivate(link: String, onResult: (Result<VlessProfile>) -> Unit) {
-        viewModelScope.launch {
-            onResult(
-                runCatching {
-                    controller.importVlessLink(link).getOrThrow().also {
-                        profiles.upsert(it)
-                        profiles.setActiveProfileId(it.id)
-                    }
-                },
-            )
-        }
+        viewModelScope.launch { onResult(profileService.importLink(link, activate = true)) }
     }
 }

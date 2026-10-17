@@ -5,10 +5,15 @@
 ## domain
 
 ### `VlessProfile`
-`@Serializable data class`. Поля: `id`, `name`, `uuid`, `host`, `port`, `type` (`tcp|ws|grpc`), `security` (`tls|reality|none`), `encryption` (только `none`), `sni`, `alpn`, `fingerprint` (uTLS), `flow`, `realityPublicKey` (`pbk`), `realityShortId` (`sid`), `wsPath`, `wsHost`, `grpcServiceName`, `extraQuery` (неизвестные параметры ссылки), `favorite`, `sortOrder`.
+`@Serializable data class`. Поля: `id`, `name`, `uuid`, `host`, `port`, `type: VlessTransport` (`tcp|ws|grpc`), `security: VlessSecurity` (`tls|reality|none`), `encryption: VlessEncryption` (только `none`), `sni`, `alpn`, `fingerprint` (uTLS), `flow`, `realityPublicKey` (`pbk`), `realityShortId` (`sid`), `wsPath`, `wsHost`, `grpcServiceName`, `extraQuery` (неизвестные параметры ссылки), `favorite`, `sortOrder`.
 Секретные поля: `uuid`, `realityPublicKey`, `realityShortId` — репозиторий хранит их отдельно (см. [data-and-storage.md](data-and-storage.md)).
 
-`id` для импортированных профилей — первые 16 hex SHA-256 от `uuid|host|port|type|security|sni|flow|wsPath|wsHost|grpcServiceName` (повторный импорт той же ссылки даёт тот же id → upsert, а не дубль). Дубликаты через UI получают случайный UUID.
+`VlessUuid.isValid` — единая проверка UUID (версии 1–8) для парсера и формы; `VlessProfile.hasCompleteRealityKeys()` — для Reality нужны оба ключа.
+
+### Enum со строковым представлением (`WireEnums.kt`)
+`VlessTransport`, `VlessSecurity`, `VlessEncryption`, `TunStack`, `SingBoxLogLevel` реализуют `WireValue` (`wire` — строка в ссылке, конфиге и хранилище). `LenientWireSerializer` пишет `wire` (JSON совпадает с прежним, когда поля были `String`) и читает мягко: trim, без учёта регистра, неизвестное значение → fallback (`TCP`, `TLS`, `NONE`, `MIXED`, `INFO`) — то, во что прежний компилятор превращал нераспознанную строку. Так одно испорченное поле не делает нечитаемым весь список профилей. Строгий разбор для ссылок и ввода — `parse()`/`fromWire()` (null → ошибка). Покрыто `StorageCompatibilityTest`.
+
+`id` для импортированных профилей — первые 16 hex SHA-256 от `uuid|host|port|type|security|sni|flow|wsPath|wsHost|grpcServiceName` (для enum берётся `wire`-строка, поэтому id совпадают с прежними) (повторный импорт той же ссылки даёт тот же id → upsert, а не дубль). Дубликаты через UI получают случайный UUID.
 
 ### `TunnelPolicy`
 Единая политика туннеля, сериализуется в JSON, хранится в репозитории и передаётся в сервис через `Intent`-extra.
@@ -23,11 +28,11 @@
 | `dohServer` / `dohPath` / `dohSni` | `1.1.1.1` / `/dns-query` / `cloudflare-dns.com` | параметры DoH |
 | `localDnsDomains` | `[]` | суффиксы доменов, резолвимые системным DNS даже в режиме DoH (≤128) |
 | `systemDnsPackageNames` | `[]` | приложения, чьи DNS-запросы идут в системный DNS (≤4096) |
-| `failClosed` | `true` | `true` → одна попытка подключения, без ретраев; **не** системный Kill Switch |
-| `singBoxLogLevel` | `info` | `trace/debug/info/warn/error` |
-| `tunStack` | `mixed` | `mixed/system/gvisor` |
+| `singleConnectAttempt` (в JSON — `failClosed`) | `true` | `true` → одна попытка подключения, без повторов; **не** системный Kill Switch |
+| `singBoxLogLevel: SingBoxLogLevel` | `INFO` | `trace/debug/info/warn/error` |
+| `tunStack: TunStack` | `MIXED` | `mixed/system/gvisor` |
 
-`TunnelPolicy.validate(): Result<Unit>` — единственная точка валидации; ошибки — строковые коды (`invalid_mtu`, `invalid_tun_ipv4_cidr`, `per_app_requires_packages`, `invalid_doh_server`, `invalid_doh_path`, `invalid_doh_sni_for_ip`, `invalid_singbox_log_level`, `invalid_tun_stack`, `invalid_package_name`, `too_many_packages`, `too_many_local_dns_domains`, `invalid_local_dns_domain`). Для IP-адреса DoH-сервера SNI обязателен.
+`TunnelPolicy.validate(): Result<Unit>` — единственная точка валидации; ошибки — `VpnError` (`invalid_mtu`, `invalid_tun_ipv4_cidr`, `per_app_requires_packages`, `invalid_doh_server`, `invalid_doh_path`, `invalid_doh_sni_for_ip`, `invalid_package_name`, `too_many_packages`, `too_many_local_dns_domains`, `invalid_local_dns_domain`). Уровень журнала и стек TUN проверяет тип. Для IP-адреса DoH-сервера SNI обязателен.
 
 ### `VpnSessionState`
 `Disconnected | Connecting | Recovering(attempt, maxAttempts) | Connected | Disconnecting | Error(error: VpnError)`.
@@ -39,22 +44,20 @@
 ## application
 
 ### `VpnSessionController`
-Центральный use-case-класс. Зависимости — порты. Публичный API:
+Сессия VPN: подключение, отключение, выравнивание по `TunnelStatus`. Зависимости — порты; `dispatcher` (по умолчанию `Default`) и `scope` внедряются, `eventLog` пишет неудачные попытки с цепочкой причин. Публичный API:
 
 | Метод | Что делает |
 |---|---|
 | `state: StateFlow<VpnSessionState>`, `lastError: StateFlow<VpnError?>` | наблюдаемое состояние; ошибка — типизированная, см. [glossary.md](glossary.md) |
-| `importVlessLink(link): Result<VlessProfile>` | только парсинг (`VlessLinkParser`), сохранять должен вызывающий |
 | `connect()` | запуск `connectSuspend` в собственном scope, игнорируется, если уже идёт |
 | `connectSuspend(): Result<Unit>` | см. алгоритм ниже |
 | `disconnectSuspend()` | отменяет `connectJob`, ставит `Disconnecting`, `systemVpn.stopVpnAndAwait()`, затем `Disconnected` |
-| `updateProfileSuspend(id, draft)` | нормализация + валидация + upsert; `id` неизменяем |
-| `deleteProfileSuspend(id)` | запрещено для активного профиля при активном VPN (`profile_delete_requires_disconnect`); при удалении активного сбрасывает `activeProfileId` |
+| `isBusy` | подключено / подключается / отключается |
 | `singBoxCoreVersion()` | версия ядра |
 | `tunnelStatus: StateFlow<TunnelStatus>` | фактическое состояние туннеля из `SystemVpnPort`; контроллер подписан на него с момента создания |
 
 **Алгоритм `connectSuspend`** (под `Mutex`; если `Connected` и туннель `Running` — сразу успех):
-1. Прочитать политику; `maxAttempts = if (failClosed) 1 else 3`.
+1. Прочитать политику; `maxAttempts = if (singleConnectAttempt) 1 else 3`.
 2. Для каждой попытки: состояние `Connecting` (для 2+ — `Recovering`), очистить `lastError`; затем
    активный профиль → проверка секретов (`uuid` непустой; для Reality — оба ключа) → `policy.validate()` → `compile` → `configWriter.writeSessionConfig` → `systemVpn.startVpn(policy, path)` → `systemVpn.smokeCheck(policy)` → проверка `tunnelStatus is Running` → `Connected` (и повторная проверка после записи).
 3. Неудача → `systemVpn.stopVpn()` (best-effort) и экспоненциальная пауза `1s << (attempt-1)`.
@@ -62,7 +65,15 @@
 
 **Подписка на `tunnelStatus`**: `Stopped` при `Connected` → `Disconnected` и `lastError = error` (если остановка с причиной, напр. `vpn_revoked`; отключение пользователем ошибки не даёт); `Running` при `Disconnected/Error` → `Connected`. В `Connecting/Recovering/Disconnecting` события игнорируются (сервис кратко публикует `Stopped` при пересоздании ядра).
 
-Валидация профиля при сохранении (`validateProfileForSave`): имя, host, порт 1..65535, UUID (версии 1–5), полнота Reality. Парсер принимает UUID версий 1–8 — небольшое расхождение.
+### `ProfileService`
+Операции с профилями; общий `lastError` сессии не трогает, ошибки — в `Result`.
+
+| Метод | Что делает |
+|---|---|
+| `parseLink(link)` | только разбор `vless://` |
+| `importLink(link, activate)` | разбор + сохранение; QR-импорт делает профиль активным |
+| `update(id, draft)` | нормализация (trim; ключи Reality сбрасываются для не-Reality) + валидация (имя, host, порт, UUID v1–8, полнота Reality) + upsert; `id` неизменяем |
+| `delete(id)` | запрещено для активного профиля, пока `isTunnelBusy()` (`profile_delete_requires_disconnect`); сбрасывает `activeProfileId` |
 
 ### `VpnPorts.kt`
 См. таблицу портов в [architecture.md](architecture.md).

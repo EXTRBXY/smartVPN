@@ -32,7 +32,7 @@
 |---|---|---|
 | Профили | `no_active_profile`, `profile_not_found`, `no_reachable_profile`, `profile_secret_unavailable`, `profile_id_immutable`, `profile_delete_requires_disconnect`, `profile_name_required`, `profile_host_required`, `profile_port_invalid`, `profile_uuid_invalid`, `profile_reality_incomplete` | controller, compiler, ViewModel |
 | Импорт ссылки | `link_not_vless`, `link_invalid`, `link_invalid_uuid`, `link_invalid_host_or_port`, `link_unsupported`, `link_reality_incomplete` | `VlessLinkParser` |
-| Политика | `per_app_requires_packages`, `invalid_package_name`, `too_many_packages`, `invalid_mtu`, `invalid_tun_ipv4_cidr`, `invalid_tun_stack`, `invalid_singbox_log_level`, `invalid_doh_server`, `invalid_doh_path`, `invalid_doh_sni_for_ip`, `invalid_local_dns_domain`, `too_many_local_dns_domains` | `TunnelPolicy.validate`, controller |
+| Политика | `per_app_requires_packages`, `invalid_package_name`, `too_many_packages`, `invalid_mtu`, `invalid_tun_ipv4_cidr`, `invalid_doh_server`, `invalid_doh_path`, `invalid_doh_sni_for_ip`, `invalid_local_dns_domain`, `too_many_local_dns_domains` | `TunnelPolicy.validate`, controller |
 | Туннель | `vpn_permission_missing`, `vpn_connect_timeout`, `vpn_start_failed`, `vpn_start_superseded`, `vpn_stop_failed`, `vpn_stop_timeout`, `vpn_revoked`, `vpn_not_running_after_connect`, `tun_establish_failed`, `empty_config`, `wifi_state_needs_fine_location` | сервис, `AndroidSystemVpn`, controller |
 | Проверка | `smoke_proxy_failed`, `smoke_timeout` | `AndroidSystemVpn.smokeCheck` |
 | Ядро (по тексту) | `core_tls_failed`, `core_dns_failed`, `core_server_unreachable` | `toVpnError` |

@@ -1,6 +1,5 @@
 package com.nothing.mobilecore.shared.application
 
-import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VpnError
@@ -9,10 +8,10 @@ import com.nothing.mobilecore.shared.domain.ensure
 import com.nothing.mobilecore.shared.domain.toVpnError
 import com.nothing.mobilecore.shared.domain.vpnFail
 import com.nothing.mobilecore.shared.domain.validate
-import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.hasCompleteRealityKeys
 import com.nothing.mobilecore.shared.domain.VpnSessionState
-import com.nothing.mobilecore.shared.infrastructure.VlessLinkParser
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,18 +24,21 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/**
+ * Сессия VPN: подключение с повторами, отключение и выравнивание состояния UI по фактическому
+ * [TunnelStatus]. Операции с профилями — в [ProfileService].
+ */
 class VpnSessionController(
     private val profileRepository: ProfileRepositoryPort,
     private val configCompiler: SingBoxConfigCompilerPort,
     private val singBoxCoreInfo: SingBoxCoreInfoPort,
     private val systemVpn: SystemVpnPort,
     private val configWriter: SessionConfigWriter,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher),
     /** Журнал событий для диагностики; платформа обязана редактировать секреты (см. LogRedaction). */
     private val eventLog: (String) -> Unit = {},
 ) {
-    private val uuidRegex =
-        Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
     private var connectJob: Job? = null
     private val connectMutex = Mutex()
 
@@ -55,11 +57,13 @@ class VpnSessionController(
         }
     }
 
-    fun importVlessLink(link: String): Result<VlessProfile> = runCatching {
-        VlessLinkParser.parse(link.trim())
-    }.onFailure { e ->
-        _lastError.value = e.toVpnError()
-    }
+    /** Сессия занята: подключено, подключается или отключается. */
+    val isBusy: Boolean
+        get() = when (_state.value) {
+            VpnSessionState.Connected, VpnSessionState.Connecting, is VpnSessionState.Recovering,
+            VpnSessionState.Disconnecting -> true
+            VpnSessionState.Disconnected, is VpnSessionState.Error -> false
+        }
 
     fun connect() {
         if (connectJob?.isActive == true) return
@@ -68,13 +72,13 @@ class VpnSessionController(
         }
     }
 
-    suspend fun connectSuspend(): Result<Unit> = withContext(Dispatchers.Default) {
+    suspend fun connectSuspend(): Result<Unit> = withContext(dispatcher) {
         connectMutex.withLock {
             if (_state.value is VpnSessionState.Connected && systemVpn.tunnelStatus.value is TunnelStatus.Running) {
                 return@withLock Result.success(Unit)
             }
             val policyForAttempts = runCatching { profileRepository.getTunnelPolicy() }.getOrElse { TunnelPolicy() }
-            val maxAttempts = if (policyForAttempts.failClosed) 1 else 3
+            val maxAttempts = if (policyForAttempts.singleConnectAttempt) 1 else MAX_CONNECT_ATTEMPTS
             var lastFailure: Throwable? = null
             repeat(maxAttempts) { index ->
                 val attempt = index + 1
@@ -90,15 +94,9 @@ class VpnSessionController(
                     val profile = profileRepository.listProfiles().find { it.id == profileId }
                         ?: vpnFail(VpnError.ProfileNotFound)
                     ensure(profile.uuid.isNotBlank()) { VpnError.ProfileSecretUnavailable }
-                    ensure(
-                        profile.security != "reality" ||
-                            (!profile.realityPublicKey.isNullOrBlank() && !profile.realityShortId.isNullOrBlank()),
-                    ) { VpnError.ProfileSecretUnavailable }
+                    ensure(profile.hasCompleteRealityKeys()) { VpnError.ProfileSecretUnavailable }
                     val policy = profileRepository.getTunnelPolicy()
-                    policy.validate().getOrElse { throw it }
-                    ensure(policy.routingMode != RoutingMode.PER_APP_ALLOWED || policy.allowedPackageNames.isNotEmpty()) {
-                        VpnError.PerAppRequiresPackages
-                    }
+                    policy.validate().getOrThrow()
                     val json = configCompiler.compile(profile, policy).getOrElse { throw it }
                     val path = configWriter.writeSessionConfig(json)
                     systemVpn.startVpn(policy, path).getOrElse { throw it }
@@ -130,7 +128,7 @@ class VpnSessionController(
         }
     }
 
-    suspend fun disconnectSuspend(): Result<Unit> = withContext(Dispatchers.Default) {
+    suspend fun disconnectSuspend(): Result<Unit> = withContext(dispatcher) {
         runCatching {
             connectJob?.cancel()
             connectJob = null
@@ -143,40 +141,8 @@ class VpnSessionController(
         }
     }
 
-    suspend fun singBoxCoreVersion(): Result<String> = withContext(Dispatchers.Default) {
+    suspend fun singBoxCoreVersion(): Result<String> = withContext(dispatcher) {
         runCatching { singBoxCoreInfo.version() }
-    }
-
-    suspend fun updateProfileSuspend(profileId: String, draft: VlessProfile): Result<Unit> = withContext(Dispatchers.Default) {
-        runCatching {
-            ensure(draft.id == profileId) { VpnError.ProfileIdImmutable }
-            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: vpnFail(VpnError.ProfileNotFound)
-            val normalized = normalizeProfileForSave(draft.copy(id = existing.id))
-            validateProfileForSave(normalized).getOrElse { throw it }
-            profileRepository.upsert(normalized)
-        }.onFailure { e ->
-            _lastError.value = e.toVpnError()
-        }
-    }
-
-    suspend fun deleteProfileSuspend(profileId: String): Result<Unit> = withContext(Dispatchers.Default) {
-        runCatching {
-            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: vpnFail(VpnError.ProfileNotFound)
-            val activeId = profileRepository.getActiveProfileId()
-            val isDeletingActive = activeId == existing.id
-            val stateNow = _state.value
-            val vpnIsActive = stateNow is VpnSessionState.Connected ||
-                stateNow is VpnSessionState.Connecting ||
-                stateNow is VpnSessionState.Recovering ||
-                stateNow is VpnSessionState.Disconnecting
-            ensure(!(isDeletingActive && vpnIsActive)) { VpnError.ProfileDeleteRequiresDisconnect }
-            profileRepository.delete(existing.id)
-            if (isDeletingActive) {
-                profileRepository.setActiveProfileId(null)
-            }
-        }.onFailure { e ->
-            _lastError.value = e.toVpnError()
-        }
     }
 
     /**
@@ -212,30 +178,8 @@ class VpnSessionController(
         return "${error.toVpnError().code} [$chain]"
     }
 
-    private fun normalizeProfileForSave(profile: VlessProfile): VlessProfile {
-        val security = profile.security.trim().lowercase()
-        val normalizedRealityPublicKey = profile.realityPublicKey?.trim().takeUnless { it.isNullOrEmpty() }
-        val normalizedRealityShortId = profile.realityShortId?.trim().takeUnless { it.isNullOrEmpty() }
-        val dropReality = security != "reality"
-        return profile.copy(
-            name = profile.name.trim(),
-            uuid = profile.uuid.trim(),
-            host = profile.host.trim(),
-            security = security,
-            realityPublicKey = if (dropReality) null else normalizedRealityPublicKey,
-            realityShortId = if (dropReality) null else normalizedRealityShortId,
-        )
-    }
-
-    private fun validateProfileForSave(profile: VlessProfile): Result<Unit> = runCatching {
-        ensure(profile.name.isNotBlank()) { VpnError.ProfileNameRequired }
-        ensure(profile.host.isNotBlank()) { VpnError.ProfileHostRequired }
-        ensure(profile.port in 1..65535) { VpnError.ProfilePortInvalid }
-        ensure(uuidRegex.matches(profile.uuid)) { VpnError.ProfileUuidInvalid }
-        ensure(
-            profile.security != "reality" ||
-                (!profile.realityPublicKey.isNullOrBlank() && !profile.realityShortId.isNullOrBlank()),
-        ) { VpnError.ProfileRealityIncomplete }
+    private companion object {
+        const val MAX_CONNECT_ATTEMPTS = 3
     }
 }
 

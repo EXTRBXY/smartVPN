@@ -1,5 +1,6 @@
 package com.nothing.mobilecore.shared.domain
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -37,17 +38,17 @@ data class TunnelPolicy(
     val localDnsDomains: List<String> = emptyList(),
     val systemDnsPackageNames: List<String> = emptyList(),
     /**
-     * If true, a failed connection attempt is stopped immediately instead of being retried.
-     * This is a retry policy, not an Android kill switch or lockdown-VPN setting.
+     * true — одна попытка подключения без повторов; false — до 3 попыток с паузами.
+     * Это политика повторов, а не Kill Switch Android. В хранилище ключ прежний (`failClosed`),
+     * чтобы не терять сохранённое значение.
      */
-    val failClosed: Boolean = true,
-    val singBoxLogLevel: String = "info",
-    val tunStack: String = "mixed",
+    @SerialName("failClosed")
+    val singleConnectAttempt: Boolean = true,
+    val singBoxLogLevel: SingBoxLogLevel = SingBoxLogLevel.INFO,
+    val tunStack: TunStack = TunStack.MIXED,
 )
 
 private val dohHostRegex = Regex("^[a-zA-Z0-9.-]+$")
-private val acceptedLogLevels = setOf("trace", "debug", "info", "warn", "error")
-private val acceptedTunStacks = setOf("mixed", "system", "gvisor")
 
 fun TunnelPolicy.validate(): Result<Unit> = runCatching {
     ensure(mtu in 1280..9000) { VpnError.InvalidMtu }
@@ -65,11 +66,6 @@ fun TunnelPolicy.validate(): Result<Unit> = runCatching {
             vpnFail(VpnError.InvalidDohSniForIp)
         }
     }
-    val logLevel = singBoxLogLevel.trim().lowercase()
-    ensure(logLevel in acceptedLogLevels) { VpnError.InvalidSingBoxLogLevel }
-    val stack = tunStack.trim().lowercase()
-    ensure(stack in acceptedTunStacks) { VpnError.InvalidTunStack }
-
     // Ограничиваем размер списка и пустые значения, чтобы не создавать невалидные include/exclude.
     val normalizedCount = allowedPackageNames.count { it.isNotBlank() }
     ensure(normalizedCount == allowedPackageNames.size) { VpnError.InvalidPackageName }
