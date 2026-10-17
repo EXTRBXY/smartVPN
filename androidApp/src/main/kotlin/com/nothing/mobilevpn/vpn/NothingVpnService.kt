@@ -24,11 +24,13 @@ import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilecore.libbox.MobilePlatformInterface
 import com.nothing.mobilecore.libbox.toAndroidIpPrefix
 import com.nothing.mobilecore.platform.AndroidSessionConfigWriter
+import com.nothing.mobilecore.platform.AppPreferences
 import com.nothing.mobilecore.platform.ConnectionEventLog
 import com.nothing.mobilecore.platform.SafeAndroidLog
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.infrastructure.LogRedaction
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.CommandServerHandler
 import io.nekohasekai.libbox.OverrideOptions
@@ -63,6 +65,16 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     private lateinit var commandServer: CommandServer
     private val handler = VpnBoxHandler()
 
+    private val tunnelStatus by lazy { (application as NothingVpnApp).graph.tunnelStatus }
+
+    /** Сессия, к которой относятся публикуемые статусы (см. [TunnelStatus]). */
+    @Volatile
+    private var currentSessionId: Long? = null
+
+    /** true, пока мы сами закрываем ядро: его колбэк serviceStop в этот момент не наш запрос. */
+    @Volatile
+    private var tearingDown = false
+
     private var sessionConfigPath: String? = null
     private var lastPolicy: TunnelPolicy? = null
     private val lifecycleMutex = Mutex()
@@ -82,16 +94,21 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
                 if (intent.getBooleanExtra(EXTRA_USER_DISCONNECT, false)) {
-                    com.nothing.mobilecore.platform.AppPreferences(this).connectionRequested = false
+                    AppPreferences(this).connectionRequested = false
                 }
                 ConnectionEventLog.add(this, "VPN service: disconnect")
-                requestStop(publishStopped = true, stopService = true)
+                requestStop(error = null)
                 return START_NOT_STICKY
             }
             ACTION_CONNECT -> {
                 ConnectionEventLog.add(this, "VPN service: connection started")
-                val configPath = intent.getStringExtra(EXTRA_CONFIG_PATH) ?: return START_NOT_STICKY
-                val policyJson = intent.getStringExtra(EXTRA_POLICY_JSON) ?: return START_NOT_STICKY
+                val sessionId = intent.getLongExtra(EXTRA_SESSION_ID, -1L)
+                val configPath = intent.getStringExtra(EXTRA_CONFIG_PATH)
+                val policyJson = intent.getStringExtra(EXTRA_POLICY_JSON)
+                if (sessionId < 0 || configPath == null || policyJson == null) {
+                    stopSelfIfIdle(startId)
+                    return START_NOT_STICKY
+                }
                 val policy = policyJsonFormat.decodeFromString(TunnelPolicy.serializer(), policyJson)
                 val notification = buildNotification().build()
                 ServiceCompat.startForeground(
@@ -100,25 +117,34 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                     notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
                 )
+                currentSessionId = sessionId
+                tunnelStatus.publish(TunnelStatus.Starting(sessionId))
                 scope.launch {
                     lifecycleMutex.withLock {
                         runCatching {
-                            connectSuspend(policy, configPath)
+                            connectSuspend(policy, configPath, sessionId)
                         }.onFailure { e ->
-                            sendConnectResult(false, e.message ?: "connectVpn_failed")
+                            val code = e.message ?: "connectVpn_failed"
+                            ConnectionEventLog.add(this@NothingVpnService, "VPN service: start failed ($code)")
                             SafeAndroidLog.e(VPN_LOG_TAG, "connectVpn failed", e)
-                            requestStopLocked(publishStopped = true, stopService = true)
+                            requestStopLocked(error = code)
                         }
                     }
                 }
                 return START_STICKY
             }
         }
+        // null-intent: система перезапустила START_STICKY-сервис после смерти процесса. Конфиг с
+        // секретами к этому моменту удалён, поднять туннель здесь нельзя — переподключение делает
+        // VpnAutomationCoordinator (запускается в NothingVpnApp.onCreate), если оно запрошено.
+        ConnectionEventLog.add(this, "VPN service: restarted without command")
+        stopSelfIfIdle(startId)
         return START_NOT_STICKY
     }
 
     override fun onRevoke() {
-        requestStop(publishStopped = true, stopService = true)
+        // Разрешение VPN отозвано: пользователь отключил в настройках или включён другой VPN.
+        requestStop(error = "vpn_revoked")
         super.onRevoke()
     }
 
@@ -129,7 +155,9 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                 teardown()
             }
         }
-        VpnRunningState.publish(applicationContext, false)
+        if (tunnelStatus.status.value !is TunnelStatus.Stopped) {
+            tunnelStatus.publish(TunnelStatus.Stopped(sessionId = currentSessionId))
+        }
         scope.coroutineContext.cancelChildren()
         super.onDestroy()
     }
@@ -292,9 +320,8 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         }
     }
 
-    private suspend fun connectSuspend(policy: TunnelPolicy, configPath: String) {
+    private suspend fun connectSuspend(policy: TunnelPolicy, configPath: String, sessionId: Long) {
         teardown()
-        VpnRunningState.publish(this, false)
         AndroidSessionConfigWriter.cleanupPreConnect(applicationContext, keepPath = configPath)
         LibboxAndroidBootstrap.ensureSetup()
         sessionConfigPath = configPath
@@ -311,11 +338,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         commandServer.start()
         DefaultNetworkMonitor.start()
 
-        try {
-            commandServer.startOrReloadService(content, buildOverrideOptions(policy))
-        } catch (e: Exception) {
-            throw e
-        }
+        commandServer.startOrReloadService(content, buildOverrideOptions(policy))
 
         if (commandServer.needWIFIState()) {
             val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -324,7 +347,8 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             }
         }
 
-        sendConnectResult(true, null)
+        ConnectionEventLog.add(this, "VPN service: tunnel ready")
+        tunnelStatus.publish(TunnelStatus.Running(sessionId, System.currentTimeMillis()))
     }
 
     private fun buildOverrideOptions(policy: TunnelPolicy): OverrideOptions =
@@ -347,6 +371,15 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         }
 
     private suspend fun teardown() {
+        tearingDown = true
+        try {
+            teardownCore()
+        } finally {
+            tearingDown = false
+        }
+    }
+
+    private suspend fun teardownCore() {
         sessionConfigPath?.let { path ->
             runCatching { File(path).delete() }
         }
@@ -364,38 +397,30 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         systemProxyEnabled = false
     }
 
-    private fun sendConnectResult(ok: Boolean, message: String?) {
-        ConnectionEventLog.add(
-            this,
-            if (ok) "VPN service: tunnel ready" else "VPN service: start failed (${message ?: "unknown"})",
-        )
-        VpnRunningState.publish(this, ok)
-        sendBroadcast(
-            Intent(VpnConnectResultContract.ACTION).apply {
-                setPackage(packageName)
-                putExtra(VpnConnectResultContract.EXTRA_OK, ok)
-                message?.let { putExtra(VpnConnectResultContract.EXTRA_MESSAGE, it) }
-            },
-            VpnInternalBroadcastSecurity.PERMISSION,
-        )
-    }
-
-    private fun requestStop(publishStopped: Boolean, stopService: Boolean) {
+    private fun requestStop(error: String?) {
+        if (tunnelStatus.status.value !is TunnelStatus.Stopped) {
+            tunnelStatus.publish(TunnelStatus.Stopping)
+        }
         scope.launch {
             lifecycleMutex.withLock {
-                requestStopLocked(publishStopped, stopService)
+                requestStopLocked(error)
             }
         }
     }
 
-    private suspend fun requestStopLocked(publishStopped: Boolean, stopService: Boolean) {
+    private suspend fun requestStopLocked(error: String?) {
         withContext(Dispatchers.IO) { teardown() }
-        if (publishStopped) {
-            VpnRunningState.publish(applicationContext, false)
+        // Повторная остановка уже остановленного сервиса не должна затирать причину прошлой остановки.
+        if (tunnelStatus.status.value !is TunnelStatus.Stopped) {
+            tunnelStatus.publish(TunnelStatus.Stopped(sessionId = currentSessionId, error = error))
         }
         stopForegroundCompat()
-        if (stopService) {
-            stopSelf()
+        stopSelf()
+    }
+
+    private fun stopSelfIfIdle(startId: Int) {
+        if (tunPfd == null && tunnelStatus.status.value is TunnelStatus.Stopped) {
+            stopSelf(startId)
         }
     }
 
@@ -469,13 +494,9 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
 
     private inner class VpnBoxHandler : CommandServerHandler {
         override fun serviceStop() {
-            tunPfd?.close()
-            tunPfd = null
-            runCatching {
-                if (::commandServer.isInitialized) {
-                    commandServer.closeService()
-                }
-            }
+            // Ядро само попросило остановиться: гасим сервис целиком, иначе статус остался бы Running.
+            if (tearingDown) return
+            requestStop(error = null)
         }
 
         override fun serviceReload() {
@@ -518,6 +539,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         const val ACTION_DISCONNECT = "com.nothing.mobilecore.action.DISCONNECT"
         const val EXTRA_USER_DISCONNECT = "user_disconnect"
         const val EXTRA_CONFIG_PATH = "config_path"
+        const val EXTRA_SESSION_ID = "session_id"
         const val EXTRA_POLICY_JSON = "policy_json"
         private const val NOTIFICATION_ID = NothingVpnApp.NOTIFICATION_ID
 

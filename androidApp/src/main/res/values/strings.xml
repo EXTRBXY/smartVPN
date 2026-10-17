@@ -7,6 +7,9 @@
     <string name="qs_tile_label">Nothing Mobile</string>
     <string name="qs_tile_subtitle_on">Включён</string>
     <string name="qs_tile_subtitle_off">Выключен</string>
+    <string name="qs_tile_subtitle_on_minutes">Включён · %d мин</string>
+    <string name="qs_tile_subtitle_connecting">Подключение…</string>
+    <string name="qs_tile_subtitle_disconnecting">Отключение…</string>
     <string name="qs_tile_no_profile">Нет профиля</string>
     <string name="qs_tile_no_profile_toast">Сначала добавьте профиль в приложении</string>
     <string name="qs_tile_need_vpn_permission">Откройте приложение и разрешите VPN</string>
@@ -18,6 +21,7 @@
     <string name="user_error_doh_params">Проверьте параметры DNS over HTTPS.</string>
     <string name="user_error_doh_sni_for_ip">Для DoH по IP-адресу укажите SNI (домен сертификата).</string>
     <string name="user_error_timeout">Не удалось подключиться вовремя. Проверьте интернет и попробуйте снова.</string>
+    <string name="user_error_vpn_revoked">VPN отключён системой или другим VPN-приложением.</string>
     <string name="user_error_tunnel_not_running">Туннель не подтвердил запуск. Попробуйте подключиться снова.</string>
     <string name="user_error_secret_unavailable">Секреты профиля недоступны. Переимпортируйте профиль.</string>
     <string name="user_error_health_dns">Проверка туннеля не прошла: проблема DNS.</string>

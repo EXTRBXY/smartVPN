@@ -2,13 +2,11 @@ package com.nothing.mobilecore
 
 import android.Manifest
 import android.app.Activity
-import android.content.BroadcastReceiver
 import android.view.WindowManager
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -93,11 +91,9 @@ import androidx.compose.material3.TextButton
 import com.nothing.mobilecore.BuildConfig
 import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.RoutingMode
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VpnSessionState
 import com.nothing.mobilecore.ui.AppViewModel
-import com.nothing.mobilecore.vpn.VpnInternalBroadcastSecurity
-import com.nothing.mobilecore.vpn.VpnRunningState
-import com.nothing.mobilecore.vpn.VpnRunningStateContract
 import com.nothing.mobilecore.ui.UserErrorText
 import com.nothing.mobilecore.platform.ConnectionEventLog
 import com.nothing.mobilecore.platform.TunnelStats
@@ -153,14 +149,6 @@ class MainActivity : ComponentActivity() {
                 .onFailure {
                     Toast.makeText(this@MainActivity, "QR-код не содержит корректный профиль", Toast.LENGTH_LONG).show()
                 }
-        }
-    }
-
-    private val vpnRunningReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != VpnRunningStateContract.ACTION) return
-            val running = intent.getBooleanExtra(VpnRunningStateContract.EXTRA_RUNNING, false)
-            (application as NothingVpnApp).graph.sessionController.applyExternalTunnelRunning(running)
         }
     }
 
@@ -253,28 +241,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    override fun onStart() {
-        super.onStart()
-        val filter = IntentFilter(VpnRunningStateContract.ACTION)
-        ContextCompat.registerReceiver(
-            this,
-            vpnRunningReceiver,
-            filter,
-            VpnInternalBroadcastSecurity.PERMISSION,
-            null,
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
-        VpnRunningState.syncFromDisk(this)
-        (application as NothingVpnApp).graph.sessionController.applyExternalTunnelRunning(
-            VpnRunningState.isRunning,
-        )
-    }
-
-    override fun onStop() {
-        runCatching { unregisterReceiver(vpnRunningReceiver) }
-        super.onStop()
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -295,6 +261,7 @@ private fun HomeRoute(
     val profiles by vm.profileList.collectAsState()
     val activeProfileId by vm.activeProfileId.collectAsState()
     val err by vm.lastError.collectAsState()
+    val tunnelStatus by vm.tunnelStatus.collectAsState()
     val tunnelStats by vm.tunnelStats.collectAsState()
     val scope = rememberCoroutineScope()
     val latencies = remember { mutableStateMapOf<String, String>() }
@@ -341,7 +308,8 @@ private fun HomeRoute(
                 TunnelStatsCard(
                     stats = if (state is VpnSessionState.Connected) tunnelStats else TunnelStats(),
                     durationMs = if (state is VpnSessionState.Connected) {
-                        (clockNow - VpnRunningState.startedAt(context)).coerceAtLeast(0)
+                        val startedAt = (tunnelStatus as? TunnelStatus.Running)?.startedAtMillis ?: clockNow
+                        (clockNow - startedAt).coerceAtLeast(0)
                     } else 0L,
                     state = state,
                     network = currentNetworkLabel(context),

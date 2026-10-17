@@ -2,10 +2,13 @@ package com.nothing.mobilecore.shared.application
 
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VpnSessionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -43,7 +46,8 @@ class VpnSessionControllerRecoveryTest {
 
         val connecting = async { ctrl.connectSuspend() }
         delay(10)
-        ctrl.applyExternalTunnelRunning(false)
+        systemVpn.tunnelStatus.value = TunnelStatus.Stopped()
+        delay(10)
 
         assertTrue(ctrl.state.value is VpnSessionState.Connecting)
         assertNull(ctrl.lastError.value)
@@ -273,6 +277,93 @@ class VpnSessionControllerRecoveryTest {
         assertEquals(8443, updated.port)
     }
 
+    @Test
+    fun externalStop_movesConnectedToDisconnectedWithReason() = runBlocking {
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val ctrl = newController(systemVpn)
+        assertTrue(ctrl.connectSuspend().isSuccess)
+
+        systemVpn.tunnelStatus.value = TunnelStatus.Stopped(sessionId = 1, error = "vpn_revoked")
+
+        awaitState(ctrl, VpnSessionState.Disconnected)
+        assertEquals("vpn_revoked", ctrl.lastError.value)
+    }
+
+    @Test
+    fun externalUserStop_doesNotReportError() = runBlocking {
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val ctrl = newController(systemVpn)
+        assertTrue(ctrl.connectSuspend().isSuccess)
+
+        systemVpn.tunnelStatus.value = TunnelStatus.Stopped(sessionId = 1)
+
+        awaitState(ctrl, VpnSessionState.Disconnected)
+        assertNull(ctrl.lastError.value)
+    }
+
+    @Test
+    fun connectAfterExternalStop_startsTunnelAgain() = runBlocking {
+        // Раньше: отключение из уведомления при закрытом приложении оставляло контроллер в Connected,
+        // и следующий connect «успешно» ничего не делал — плитка зависала на «Подключение…».
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val ctrl = newController(systemVpn)
+        assertTrue(ctrl.connectSuspend().isSuccess)
+        systemVpn.tunnelStatus.value = TunnelStatus.Stopped(sessionId = 1)
+        awaitState(ctrl, VpnSessionState.Disconnected)
+
+        assertTrue(ctrl.connectSuspend().isSuccess)
+
+        assertEquals(2, systemVpn.startCalls)
+        assertEquals(VpnSessionState.Connected, ctrl.state.value)
+    }
+
+    @Test
+    fun connectedWhileTunnelStopped_isNotTreatedAsAlreadyConnected() = runBlocking {
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val ctrl = newController(systemVpn)
+        assertTrue(ctrl.connectSuspend().isSuccess)
+        // Статус туннеля сменился, а контроллер мог ещё не успеть его обработать.
+        systemVpn.tunnelStatus.value = TunnelStatus.Stopped(sessionId = 1)
+
+        assertTrue(ctrl.connectSuspend().isSuccess)
+
+        assertEquals(2, systemVpn.startCalls)
+    }
+
+    @Test
+    fun runningTunnelWhileDisconnected_isReflectedAsConnected() = runBlocking {
+        val systemVpn = FakeSystemVpn(failStartTimes = 0)
+        val ctrl = newController(systemVpn)
+
+        systemVpn.tunnelStatus.value = TunnelStatus.Running(sessionId = 7, startedAtMillis = 0L)
+
+        awaitState(ctrl, VpnSessionState.Connected)
+    }
+
+    private fun newController(systemVpn: FakeSystemVpn): VpnSessionController {
+        val profile = VlessProfile(
+            id = "p1",
+            name = "test",
+            uuid = "12345678-1234-4123-8123-123456789abc",
+            host = "example.com",
+            port = 443,
+        )
+        val compiler = object : SingBoxConfigCompilerPort {
+            override fun compile(profile: VlessProfile, policy: TunnelPolicy): Result<String> = Result.success("{}")
+        }
+        return VpnSessionController(
+            FakeProfileRepository(profile, TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = true)),
+            compiler,
+            SingBoxCoreInfoPort { "1.0.0" },
+            systemVpn,
+            SessionConfigWriter { "/tmp/session.json" },
+        )
+    }
+
+    private suspend fun awaitState(ctrl: VpnSessionController, expected: VpnSessionState) {
+        withTimeout(2_000) { ctrl.state.first { it == expected } }
+    }
+
     private class FakeProfileRepository(
         private val profile: VlessProfile,
         initialPolicy: TunnelPolicy = TunnelPolicy(routingMode = RoutingMode.FULL_TUN, failClosed = false),
@@ -319,20 +410,26 @@ class VpnSessionControllerRecoveryTest {
         var stopAwaitCalls: Int = 0
             private set
         private var smokeCalls: Int = 0
+        override val tunnelStatus = MutableStateFlow<TunnelStatus>(TunnelStatus.Stopped())
         override suspend fun startVpn(policy: TunnelPolicy, singBoxConfigPath: String): Result<Unit> {
             if (connectDelayMs > 0) delay(connectDelayMs)
             startCalls++
             return if (startCalls <= failStartTimes) {
+                tunnelStatus.value = TunnelStatus.Stopped(startCalls.toLong(), "start_failed")
                 Result.failure(IllegalStateException("start_failed"))
             } else {
+                tunnelStatus.value = TunnelStatus.Running(startCalls.toLong(), startedAtMillis = 0L)
                 Result.success(Unit)
             }
         }
 
-        override suspend fun stopVpn() = Unit
+        override suspend fun stopVpn() {
+            tunnelStatus.value = TunnelStatus.Stopped()
+        }
         override suspend fun stopVpnAndAwait(): Result<Unit> {
             stopAwaitCalls++
             if (stopDelayMs > 0) delay(stopDelayMs)
+            tunnelStatus.value = TunnelStatus.Stopped()
             return Result.success(Unit)
         }
         override suspend fun smokeCheck(policy: TunnelPolicy): Result<Unit> {

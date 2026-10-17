@@ -13,11 +13,12 @@ Android-first VPN-клиент (Kotlin) на ядре **sing-box** (встрое
 | `androidApp/libs/libbox.aar` | Нативное ядро (gomobile). Собирается `scripts/build-libbox-aar.ps1`. |
 | `.cursor/rules/*.mdc` | Исходные инженерные правила проекта — **обязательны к соблюдению**, см. ниже. |
 | `docs/` | Документация (архитектура, жизненный цикл, безопасность, сборка, техдолг). |
-| `cursor_.md` | Экспорт старого чата Cursor (выбор фреймворка). Только историческая справка. |
+| `docs/history/` | Экспорт старого чата Cursor (выбор фреймворка). Только историческая справка. |
+| `third_party/sing-box/LICENSE` | Лицензия sing-box (GPL), распространяется вместе с `libbox.aar`. |
 
 ## Критично: имена пакетов и каталогов не совпадают
 
-Каталоги исходников — `com/nothing/mobilevpn/...`, но **`package` и `applicationId` — `com.nothing.mobilecore`** (shared: `com.nothing.mobilecore.shared`, namespace библиотеки `com.nothing.mobilecore.shared`). Это не ошибка поиска: так сейчас в коде и в `gradle.properties` (`app.namespace`, `app.applicationId`). Action-строки broadcast и permission тоже `com.nothing.mobilecore.*`. Не «чини» это попутно — смена applicationId ломает данные установленных копий; делай отдельной задачей с миграцией.
+Каталоги исходников — `com/nothing/mobilevpn/...`, но **`package` и `applicationId` — `com.nothing.mobilecore`** (shared: `com.nothing.mobilecore.shared`, namespace библиотеки `com.nothing.mobilecore.shared`). Это не ошибка поиска: так сейчас в коде и в `gradle.properties` (`app.namespace`, `app.applicationId`). Action-строки `Intent` сервиса тоже `com.nothing.mobilecore.*`. Не «чини» это попутно — смена applicationId ломает данные установленных копий; делай отдельной задачей с миграцией.
 
 ## Команды
 
@@ -49,7 +50,7 @@ Windows / PowerShell, JDK 17, из корня:
 
 1. **Секреты** (`uuid`, `realityPublicKey`, `realityShortId`) хранятся только в `SecureStoreAndroid` (EncryptedSharedPreferences). В списке профилей они обнуляются (`stripSecrets`). Не клади их в логи, `Intent`, `SharedPreferences` в открытом виде.
 2. **Логи** — только через `LogRedaction` / `SafeAndroidLog` / `ConnectionEventLog`. Новые сообщения об ошибках, уходящие пользователю или в журнал, проходят `redactUserMessage`.
-3. **Внутренние broadcast** (`VPN_CONNECT_RESULT`, `VPN_RUNNING_STATE`): отправка с `setPackage` + permission `...INTERNAL_BROADCAST` (signature); получатели — `ContextCompat.registerReceiver` с этим permission и `RECEIVER_NOT_EXPORTED`.
+3. **Состояние туннеля** передаётся внутри процесса через `TunnelStatusRepository` (`StateFlow`), внутренних broadcast нет. Если всё же понадобится broadcast — `setPackage` + signature-permission + `RECEIVER_NOT_EXPORTED`.
 4. **Session config** (`sing-box-session-*.json` и `.json.tmp`) лежит в `noBackupFilesDir`, читается сервисом и **удаляется до старта ядра**; чистка не должна трогать `keepPath` и его `.tmp`-пару.
 5. `workingPath` libbox — внутреннее хранилище (`filesDir/runtime`).
 6. URL из уведомлений ядра открываются только после `isSafeNotificationUrl` (https, не localhost/private/link-local).
@@ -57,13 +58,13 @@ Windows / PowerShell, JDK 17, из корня:
 
 ## Подводные камни
 
-- `VpnSessionState` в `VpnSessionController` — состояние UI-стороны; реальная истина о туннеле — `VpnRunningState` (SharedPreferences + broadcast). Расхождения выравнивает `applyExternalTunnelRunning`. Промежуточный «stopped» при reconnect — ожидаемый, не ошибка.
+- Истина о туннеле — `TunnelStatus` в `TunnelStatusRepository` (только память процесса, пишет только `NothingVpnService`). `VpnSessionState` контроллера — состояние UI-стороны, выравнивается по `TunnelStatus` подпиской внутри контроллера. Не сохраняй «running» на диск: после смерти процесса туннель гарантированно мёртв, а сохранённый флаг уже давал ложное «Вкл» на плитке. Промежуточный `Stopped` при reconnect — ожидаемый, не ошибка.
 - Ошибки передаются **строковыми кодами** (`no_active_profile`, `smoke_proxy_failed`, …) и мапятся в текст в `ui/UserErrorText.kt`. Новый код ошибки = правка там и в `strings.xml`.
 - Доступ к профилям/политике ждёт `ProfileStorageMigration.awaitProfileStorageReady()` — новые методы репозитория должны делать то же.
 - `failClosed=true` означает «одна попытка без ретраев», а не Android Kill Switch. Настройка `autoReconnect` в UI инвертирует это поле.
 - `MainActivity.kt` (~1800 строк) содержит почти все экраны; `AppViewModel` — единственный ViewModel, общий для всех маршрутов.
 - Проверки «задержки» — это TCP connect, а не проверка VLESS/Reality/DNS.
-- Tracked в git, но не используются кодом: `androidApp/src/main/assets/singbox/arm64-v8a/sing-box` (58 МБ, наследие CLI-подхода), `sing-box-1.13.9-android-arm64/`, `.kotlin/metadata/`. См. [docs/tech-debt.md](docs/tech-debt.md).
+- Плитка (`VpnQuickTileService`) рисуется чистой функцией `TileModel.from(...)` от общего состояния — новые состояния добавляй туда и в `TileModelTest`.
 
 ## Перед завершением задачи
 

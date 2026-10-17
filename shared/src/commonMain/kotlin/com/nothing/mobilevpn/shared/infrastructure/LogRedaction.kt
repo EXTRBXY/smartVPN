@@ -6,12 +6,13 @@ object LogRedaction {
     private val realitySidRegex = Regex("sid=[^&\\s]+", RegexOption.IGNORE_CASE)
     private val windowsPathRegex = Regex("[A-Za-z]:\\\\[^\\s\"]+")
     private val unixPathRegex = Regex("/[^\\s\"]+")
+    private val vlessUserInfoRegex = Regex("vless://[^@]+@")
     private val sessionFileRegex = Regex("sing-box-session-[^\\s\"']+\\.json")
 
     fun redactForLog(text: String): String =
         text
             .replace(uuidRegex, "[uuid]")
-            .replace(Regex("vless://[^@]+@"), "vless://[redacted]@")
+            .replace(vlessUserInfoRegex, "vless://[redacted]@")
             .replace(realityPbkRegex, "pbk=[redacted]")
             .replace(realitySidRegex, "sid=[redacted]")
             .replace(windowsPathRegex) { path ->

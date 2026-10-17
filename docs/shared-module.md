@@ -51,16 +51,16 @@
 | `updateProfileSuspend(id, draft)` | нормализация + валидация + upsert; `id` неизменяем |
 | `deleteProfileSuspend(id)` | запрещено для активного профиля при активном VPN (`profile_delete_requires_disconnect`); при удалении активного сбрасывает `activeProfileId` |
 | `singBoxCoreVersion()` | версия ядра |
-| `applyExternalTunnelRunning(running)` | синхронизация состояния с реальностью (плитка, ресивер, старт Activity) |
+| `tunnelStatus: StateFlow<TunnelStatus>` | фактическое состояние туннеля из `SystemVpnPort`; контроллер подписан на него с момента создания |
 
-**Алгоритм `connectSuspend`** (под `Mutex`; если уже `Connecting/Connected` — сразу успех):
+**Алгоритм `connectSuspend`** (под `Mutex`; если `Connected` и туннель `Running` — сразу успех):
 1. Прочитать политику; `maxAttempts = if (failClosed) 1 else 3`.
 2. Для каждой попытки: состояние `Connecting` (для 2+ — `Recovering`), очистить `lastError`; затем
-   активный профиль → проверка секретов (`uuid` непустой; для Reality — оба ключа) → `policy.validate()` → `compile` → `configWriter.writeSessionConfig` → `systemVpn.startVpn(policy, path)` → `systemVpn.smokeCheck(policy)` → `Connected`.
+   активный профиль → проверка секретов (`uuid` непустой; для Reality — оба ключа) → `policy.validate()` → `compile` → `configWriter.writeSessionConfig` → `systemVpn.startVpn(policy, path)` → `systemVpn.smokeCheck(policy)` → проверка `tunnelStatus is Running` → `Connected` (и повторная проверка после записи).
 3. Неудача → `systemVpn.stopVpn()` (best-effort) и экспоненциальная пауза `1s << (attempt-1)`.
 4. После всех попыток: `lastError`, состояние `Error` → `Disconnected`, `Result.failure`.
 
-**`applyExternalTunnelRunning(false)`** игнорируется в `Connecting/Recovering/Disconnected/Disconnecting` (сервис публикует «stopped» при пересоздании ядра), иначе переводит в `Disconnected` и, при `failClosed`, пишет `vpn_not_running_after_connect`.
+**Подписка на `tunnelStatus`**: `Stopped` при `Connected` → `Disconnected` и `lastError = error` (если остановка с причиной, напр. `vpn_revoked`; отключение пользователем ошибки не даёт); `Running` при `Disconnected/Error` → `Connected`. В `Connecting/Recovering/Disconnecting` события игнорируются (сервис кратко публикует `Stopped` при пересоздании ядра).
 
 Валидация профиля при сохранении (`validateProfileForSave`): имя, host, порт 1..65535, UUID (версии 1–5), полнота Reality. Парсер принимает UUID версий 1–8 — небольшое расхождение.
 

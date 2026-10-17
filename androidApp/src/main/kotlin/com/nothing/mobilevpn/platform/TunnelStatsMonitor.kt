@@ -1,5 +1,6 @@
 package com.nothing.mobilecore.platform
 
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import io.nekohasekai.libbox.CommandClient
 import io.nekohasekai.libbox.CommandClientHandler
 import io.nekohasekai.libbox.CommandClientOptions
@@ -27,7 +28,7 @@ data class TunnelStats(
     val activeConnections: Int = 0,
 )
 
-class TunnelStatsMonitor {
+class TunnelStatsMonitor(private val tunnelStatus: StateFlow<TunnelStatus>) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutableStats = MutableStateFlow(TunnelStats())
     val stats: StateFlow<TunnelStats> = mutableStats.asStateFlow()
@@ -35,7 +36,7 @@ class TunnelStatsMonitor {
     fun start() {
         scope.launch {
             while (true) {
-                if (!com.nothing.mobilecore.vpn.VpnRunningState.isRunning) {
+                if (tunnelStatus.value !is TunnelStatus.Running) {
                     delay(1_000)
                     continue
                 }

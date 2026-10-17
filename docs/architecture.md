@@ -61,15 +61,15 @@ NothingVpnGraph(context)
 
 ## Процессы и потоки
 
-- Всё приложение — **один процесс**. Сервис, UI, плитка и ресивер делят синглтоны (`VpnRunningState.isRunning`, `DefaultNetworkMonitor`, граф).
-- Тем не менее связь UI ↔ сервис организована как между процессами: `Intent` в сервис, broadcast обратно, флаг в `SharedPreferences` как источник истины. Это сознательная защита от гонок и от перезапуска процесса (см. [vpn-lifecycle.md](vpn-lifecycle.md)).
+- Всё приложение — **один процесс**. Сервис, UI, плитка и ресивер делят синглтоны (`DefaultNetworkMonitor`, граф с `TunnelStatusRepository`).
+- Команды в сервис идут через `Intent`, обратно — через `StateFlow<TunnelStatus>` в `TunnelStatusRepository` (единственный источник истины, только в памяти: после смерти процесса туннель гарантированно остановлен). См. [vpn-lifecycle.md](vpn-lifecycle.md).
 - `VpnSessionController` создаёт собственный `CoroutineScope(SupervisorJob() + Dispatchers.Default)`; `connectSuspend` сериализован `Mutex` (single-flight).
 - `AndroidSystemVpn.startVpn/stopVpnAndAwait` выполняются на `Dispatchers.Main.immediate`, т.к. регистрируют `BroadcastReceiver` и стартуют сервис; ожидание — `suspendCancellableCoroutine` + `withTimeout` (30 с на старт, 10 с на остановку).
 - `NothingVpnService` работает в `CoroutineScope(SupervisorJob() + Dispatchers.IO)`, все изменения жизненного цикла ядра — под `lifecycleMutex`.
 
 ## Глобальные синглтоны (важно для рефакторинга)
 
-`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener` (actor), `VpnRunningState`, `ProfileStorageMigration`, `ConnectionEventLog`, `LocalResolver`, `LibboxProxyProbe`, `SafeAndroidLog`, `VpnEncryption`. Они хранят изменяемое состояние на уровне процесса и затрудняют unit-тестирование.
+`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener` (actor), `ProfileStorageMigration`, `ConnectionEventLog`, `LocalResolver`, `LibboxProxyProbe`, `SafeAndroidLog`, `VpnEncryption`. Они хранят изменяемое состояние на уровне процесса и затрудняют unit-тестирование.
 
 ## Расширение под iOS
 

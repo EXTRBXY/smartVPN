@@ -57,4 +57,3 @@ AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compile
 
 ## Прочее
 - `.cursorignore` исключает крупные артефакты из индекса Cursor.
-- Артефакты `.kotlin/metadata/*.klib` попали в git (отсутствуют в `.gitignore`) — см. [tech-debt.md](tech-debt.md).

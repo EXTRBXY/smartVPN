@@ -14,7 +14,7 @@ UUID профиля и параметры Reality (`pbk`, `sid`); адрес с�
 | Логи | Маскирование UUID, `vless://…@`, `pbk`, `sid`, путей session-файлов; в release исключения логируются без сообщения; события пользовательского журнала режутся до 240 символов и без переводов строк | `LogRedaction`, `SafeAndroidLog`, `ConnectionEventLog` |
 | Экспорт | Ссылка с UUID отдаётся только после диалога-предупреждения; диагностический отчёт не содержит секретов | `HomeRoute`, `DiagnosticsRoute` |
 | Скриншоты | `FLAG_SECURE` в не-debug сборках | `MainActivity.onCreate` |
-| Внутренние broadcast | Signature-permission `INTERNAL_BROADCAST`; отправка с `setPackage` и permission; приём с permission и `RECEIVER_NOT_EXPORTED` | манифест, `VpnRunningState`, `NothingVpnService.sendConnectResult`, `AndroidSystemVpn`, `MainActivity`, `VpnQuickTileService` |
+| Состояние туннеля | Передаётся внутри процесса через `StateFlow` (`TunnelStatusRepository`); внутренних broadcast и собственного permission нет — нечего подделать извне | `TunnelStatusRepository`, `NothingVpnService` |
 | Экспортируемые компоненты | `VpnService` не экспортирован; экспортированы только Activity, boot-ресивер и tile (обязательно) | манифест |
 | Уведомления ядра | Открытие URL только `https` и не localhost/`.local`/private/link-local/CGNAT/loopback | `NothingVpnService.isSafeNotificationUrl` |
 | Сетевой трафик приложения | Cleartext запрещён | `network_security_config.xml` |
@@ -37,7 +37,7 @@ UUID профиля и параметры Reality (`pbk`, `sid`); адрес с�
 ## Чек-лист ревью изменений
 
 1. Новый код не пишет `uuid`/`pbk`/`sid`/полные ссылки в `Log`, `Toast`, `Intent`, `SharedPreferences` (открытые), исключения.
-2. Новый внутренний broadcast — с `setPackage`, permission и `RECEIVER_NOT_EXPORTED`.
+2. Предпочитай `StateFlow`/граф внутри процесса. Если нужен внутренний broadcast — `setPackage`, signature-permission и `RECEIVER_NOT_EXPORTED`.
 3. Новые файлы с конфигом — в `noBackupFilesDir`, учтены в `SessionConfigFileLifecycle` (имя `sing-box-session-*`) либо удаляются сразу.
 4. Любое «открыть URL» из внешних данных проходит строгую проверку.
 5. Новая настройка политики проходит `TunnelPolicy.validate()`.

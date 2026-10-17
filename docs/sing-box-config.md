@@ -1,6 +1,6 @@
 # Генерация конфигурации sing-box
 
-Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Версия ядра в репозитории — sing-box **1.13.x** (каталог `sing-box-1.13.9-android-arm64/`, `libbox.aar`); формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
+Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Версия ядра в репозитории — sing-box **1.13.x** (`libbox.aar`, лицензия — `third_party/sing-box/LICENSE`); формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
 
 ## Структура результата
 

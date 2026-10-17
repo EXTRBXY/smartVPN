@@ -2,9 +2,10 @@ package com.nothing.mobilecore.vpn
 
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.nothing.mobilecore.platform.AndroidSystemVpn
+import com.nothing.mobilecore.NothingVpnApp
 import com.nothing.mobilecore.platform.ProfileRepositoryAndroid
 import com.nothing.mobilecore.platform.SecureStoreAndroid
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -16,35 +17,36 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class VpnLifecycleInstrumentationTest {
     @Test
-    fun disconnectAction_clearsPersistedRunningState() = runBlocking {
+    fun freshProcess_startsWithStoppedTunnel() {
+        val app = ApplicationProvider.getApplicationContext<NothingVpnApp>()
+        assertTrue(app.graph.tunnelStatus.status.value is TunnelStatus.Stopped)
+    }
+
+    @Test
+    fun legacyRunningFlag_isDeletedOnStartup() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        VpnRunningState.publish(context, true)
-        AndroidSystemVpn(context).stopVpn()
+        context.getSharedPreferences("nothing_vpn_running_flag", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("running", true).commit()
 
-        val deadline = System.currentTimeMillis() + 4_000L
-        var running = VpnRunningState.readPersisted(context)
-        while (running && System.currentTimeMillis() < deadline) {
-            Thread.sleep(100)
-            running = VpnRunningState.readPersisted(context)
-        }
+        TunnelStatusRepository(context)
 
-        assertFalse(running)
+        assertFalse(
+            context.getSharedPreferences("nothing_vpn_running_flag", android.content.Context.MODE_PRIVATE)
+                .getBoolean("running", false),
+        )
     }
 
     @Test
     fun contracts_useNeutralActionPrefix() {
         assertEquals("com.nothing.mobilecore.action.CONNECT", NothingVpnService.ACTION_CONNECT)
         assertEquals("com.nothing.mobilecore.action.DISCONNECT", NothingVpnService.ACTION_DISCONNECT)
-        assertEquals("com.nothing.mobilecore.action.VPN_CONNECT_RESULT", VpnConnectResultContract.ACTION)
-        assertEquals("com.nothing.mobilecore.action.VPN_RUNNING_STATE", VpnRunningStateContract.ACTION)
     }
 
     @Test
     fun stopVpnAndAwait_returnsWhenAlreadyStopped() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        VpnRunningState.publish(context, false)
+        val app = ApplicationProvider.getApplicationContext<NothingVpnApp>()
 
-        val result = AndroidSystemVpn(context).stopVpnAndAwait()
+        val result = app.graph.systemVpn.stopVpnAndAwait()
 
         assertTrue(result.isSuccess)
     }

@@ -7,7 +7,6 @@
 | `nothing_vpn_profiles` | EncryptedSharedPreferences | `profiles_json` (список профилей **без** секретов), `active_profile_id`, `tunnel_policy_json`, маркер `legacy_migration_retry_needed` | `ProfileRepositoryAndroid`, `VpnEncryption` |
 | `nothing_vpn_secure` | EncryptedSharedPreferences | `profile_secret:<profileId>` → JSON `ProfileSecrets{profileId, uuid, realityPublicKey, realityShortId}` | `SecureStoreAndroid` |
 | `nothing_vpn_user_settings` | SharedPreferences (открытые) | флаги автоматизации, `trusted_wifi`, `routing_rule_sets` (JSON), `connection_requested` | `AppPreferences` |
-| `nothing_vpn_running_flag` | SharedPreferences | `running`, `started_at` | `VpnRunningState` |
 | `nothing_vpn_diagnostics` | SharedPreferences | журнал событий (≤80 строк) | `ConnectionEventLog` |
 | `noBackupFilesDir/sing-box-session-*.json(.tmp)` | файлы | JSON-конфиг сессии с секретами (живёт секунды) | `AndroidSessionConfigWriter` |
 | `filesDir/runtime`, `cacheDir` | каталоги libbox | рабочие данные и temp ядра | `LibboxAndroidBootstrap` |

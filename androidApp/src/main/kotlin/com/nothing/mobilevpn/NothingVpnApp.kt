@@ -7,20 +7,22 @@ import android.os.Build
 import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilecore.platform.NothingVpnGraph
 import com.nothing.mobilecore.platform.ProfileStorageMigration
+import com.nothing.mobilecore.platform.VpnAutomationCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 class NothingVpnApp : Application() {
 
-    private val appStartScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Scope на время жизни процесса: для операций, которые не должны обрываться вместе с плиткой/экраном. */
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val graph by lazy { NothingVpnGraph(this) }
-    val automation by lazy { com.nothing.mobilecore.platform.VpnAutomationCoordinator(this, graph) }
+    val automation by lazy { VpnAutomationCoordinator(this, graph) }
 
     override fun onCreate() {
         super.onCreate()
-        ProfileStorageMigration.startProfileStorageMigration(this, appStartScope)
+        ProfileStorageMigration.startProfileStorageMigration(this, applicationScope)
         LibboxAndroidBootstrap.attachBase(this)
         LibboxAndroidBootstrap.ensureSetup()
         automation.start()

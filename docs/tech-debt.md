@@ -7,7 +7,8 @@
 ### 1. `serviceReload()` фактически мёртв
 `NothingVpnService.VpnBoxHandler.serviceReload()` читает `sessionConfigPath`, но `connectSuspend` обнуляет его сразу после удаления файла (по дизайну — чтобы секреты не лежали на диске). Следовательно reload/`setSystemProxyEnabled` не перезапускают ядро. Нужно решение: хранить JSON конфига в памяти сервиса на время сессии (и очищать в `teardown`) либо явно отключить возможность.
 
-### 2. Два источника истины о состоянии туннеля
+### 2. ~~Два источника истины о состоянии туннеля~~ — сделано
+Введён `TunnelStatus` + `TunnelStatusRepository` (`StateFlow` в памяти процесса), broadcast и флаг на диске удалены, контроллер подписан на статус. См. [vpn-lifecycle.md](vpn-lifecycle.md). Исходное описание:
 `VpnSessionController.state` (память), `VpnRunningState` (prefs + `@Volatile` + broadcast) и жизненное состояние сервиса. Выравнивание — `applyExternalTunnelRunning` с набором исключений для промежуточных состояний. Это источник гонок (плитка, автоматизация, Activity). Кандидат: единый `StateFlow` состояния в сервисе/репозитории состояния, доступный всем компонентам одного процесса, broadcast убрать.
 
 ### 3. Хрупкие строковые коды и тексты ошибок
@@ -27,7 +28,7 @@ ViewModel напрямую делает сокет-соединения (`testPr
 ## P2
 
 ### 7. Глобальные синглтоны с изменяемым состоянием
-`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener`, `VpnRunningState`, `ProfileStorageMigration`, `ConnectionEventLog`, `LibboxProxyProbe`. Нет внедрения зависимостей (ручной `NothingVpnGraph`, сервис его не использует). Для тестов сервис/мониторы недоступны. Рассмотреть Hilt/Koin или явную передачу через `Graph`; `NothingVpnService` получает политику сериализованной в `Intent`.
+`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener`, `ProfileStorageMigration`, `ConnectionEventLog`, `LibboxProxyProbe`. Нет внедрения зависимостей (ручной `NothingVpnGraph`, сервис его не использует). Для тестов сервис/мониторы недоступны. Рассмотреть Hilt/Koin или явную передачу через `Graph`; `NothingVpnService` получает политику сериализованной в `Intent`.
 
 ### 8. `VpnSessionController` создаёт собственный scope и содержит смесь ответственностей
 Подключение, CRUD профилей, нормализация/валидация профиля, синхронизация внешнего состояния, версия ядра. Dispatchers (`Dispatchers.Default`, `Main.immediate` в `AndroidSystemVpn`) жёстко зашиты — нельзя подставить тестовый. Разделить `ConnectUseCase`, `ProfileUseCases`, инжектировать `CoroutineDispatcher`/`CoroutineScope`.
@@ -66,21 +67,17 @@ ViewModel напрямую делает сокет-соединения (`testPr
 ## P3
 
 ### 17. Мусор и артефакты в git
-- `androidApp/src/main/assets/singbox/arm64-v8a/sing-box` (≈58 МБ) — исполняемый бинарник из подхода с CLI; код его не использует (в проекте запрещён `ProcessBuilder`), но он попадает в APK как asset.
-- `sing-box-1.13.9-android-arm64/` — только `LICENSE`.
-- `.kotlin/metadata/*.klib` — артефакты Kotlin-сборки, не в `.gitignore`.
+- ~~`assets/singbox/arm64-v8a/sing-box` (≈58 МБ), `sing-box-1.13.9-android-arm64/`, `.kotlin/metadata/`~~ — удалены; лицензия sing-box перенесена в `third_party/sing-box/LICENSE`, `.kotlin/` в `.gitignore`. Бинарник остаётся в истории git (≈58 МБ при клоне) — чистить историю только отдельным решением.
 - `androidApp/libs/libbox.aar` (≈40 МБ) закоммичен, хотя README пишет «не коммитится без артефакта». Определиться: Git LFS / релизные артефакты / сборка в CI.
-- `cursor_.md` — экспорт чата; перенести в `docs/history/` или удалить.
+- ~~`cursor_.md`~~ — перенесён в `docs/history/`.
 
 ### 18. Гигиена кода
-- `NothingVpnService.connectSuspend`: `try { … } catch (e) { throw e }` — бессмысленный блок.
 - `VpnQuickTileService` и `MainActivity` дублируют регистрацию ресивера; ссылки на `Context.registerReceiver` повторяются 4 раза — вынести в helper.
 - `AppPreferences.routingRuleSets` использует `Json` по умолчанию в каждом вызове; пустые `catch`.
-- В `NothingVpnApp` fully-qualified имя `com.nothing.mobilecore.platform.VpnAutomationCoordinator` вместо импорта.
 - `AndroidSessionConfigWriter` — три похожих companion-функции очистки с одинаковыми параметрами.
-- `LogRedaction.redactForLog` компилирует `Regex("vless://[^@]+@")` на каждый вызов; unix-регулярка не маскирует произвольные пути (сохраняет их).
+- `LogRedaction.redactForLog`: unix-регулярка не маскирует произвольные пути (сохраняет их).
 - `versionCode`/`versionName` захардкожены; нет схемы релизов.
-- CI не запускает `lintDebug`; README и CI используют разные задачи для shared (`testAndroidHostTest` vs `check`).
+- CI теперь запускает `lintDebug` (0 ошибок, ~50 предупреждений — разобрать). README и CI используют разные задачи для shared (`testAndroidHostTest` vs `check`; `check` их включает).
 - `QUERY_ALL_PACKAGES`, `CAMERA`, `FINE_LOCATION` в манифесте: пересмотреть при публикации в Play.
 - iOS-таргеты объявлены, `iosApp` нет, а `TunnelPolicy` содержит Android-специфику; `okio` подключён ради одного SHA-256.
 

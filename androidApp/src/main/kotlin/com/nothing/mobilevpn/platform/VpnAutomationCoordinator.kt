@@ -10,7 +10,7 @@ import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import androidx.core.content.ContextCompat
 import com.nothing.mobilecore.shared.domain.VpnSessionState
-import com.nothing.mobilecore.vpn.VpnRunningState
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -84,7 +84,8 @@ class VpnAutomationCoordinator(
         val untrustedWifi = settings.connectOnUntrustedWifi && wifi != null && wifi !in settings.trustedWifiNames
         if (!requestedReconnect && !untrustedWifi) return
         if (untrustedWifi) preferences.connectionRequested = true
-        if (VpnRunningState.readPersisted(app)) return
+        val tunnel = graph.tunnelStatus.status.value
+        if (tunnel is TunnelStatus.Running || tunnel is TunnelStatus.Starting) return
         if (graph.systemVpn.vpnPermissionNeeded()) {
             ConnectionEventLog.add(app, "Automatic connection skipped: VPN permission required")
             return
@@ -105,7 +106,7 @@ class VpnAutomationCoordinator(
             while (true) {
                 delay(60_000)
                 val settings = preferences.automation()
-                if (!settings.periodicHealthCheck || !VpnRunningState.readPersisted(app)) {
+                if (!settings.periodicHealthCheck || graph.tunnelStatus.status.value !is TunnelStatus.Running) {
                     consecutiveFailures = 0
                     continue
                 }

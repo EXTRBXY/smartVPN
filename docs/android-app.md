@@ -6,7 +6,6 @@
 
 | Элемент | Значение |
 |---|---|
-| Собственный permission | `com.nothing.mobilecore.permission.INTERNAL_BROADCAST`, `protectionLevel=signature` — защита внутренних broadcast |
 | Разрешения | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `ACCESS_FINE/COARSE_LOCATION` (SSID Wi-Fi и `NeedWIFIState` ядра, как в SFA), `CHANGE_NETWORK_STATE`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `CAMERA` (QR; `uses-feature camera required=false`), `QUERY_ALL_PACKAGES` (список всех приложений для split tunneling; осознанно для личного распространения) |
 | `<application>` | `NothingVpnApp`, `allowBackup=false`, `networkSecurityConfig` (cleartext запрещён), правила backup/extraction пустые |
 | `MainActivity` | launcher + `QS_TILE_PREFERENCES` (долгое нажатие на плитку открывает приложение), `adjustResize` |
@@ -21,23 +20,20 @@
 ### `NothingVpnService : VpnService, MobilePlatformInterface`
 Ядро Android-реализации. Поля: `commandServer` (libbox), `tunPfd`, `sessionConfigPath`, `lastPolicy`, `lifecycleMutex`, `scope(IO)`.
 
-Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_CONFIG_PATH`, `EXTRA_POLICY_JSON`), `ACTION_DISCONNECT` (`EXTRA_USER_DISCONNECT`).
+Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EXTRA_CONFIG_PATH`, `EXTRA_POLICY_JSON`), `ACTION_DISCONNECT` (`EXTRA_USER_DISCONNECT`).
 
-- `onStartCommand(CONNECT)`: читает путь и политику, `startForeground(NOTIFICATION_ID=1001, type=CONNECTED_DEVICE)`, в `scope` под мьютексом вызывает `connectSuspend`; при исключении — `sendConnectResult(false)` и полная остановка. Возвращает `START_STICKY` для CONNECT, `START_NOT_STICKY` иначе.
+- `onStartCommand(CONNECT)`: читает sessionId, путь и политику, `startForeground(NOTIFICATION_ID=1001, type=CONNECTED_DEVICE)`, публикует `Starting(sessionId)`, в `scope` под мьютексом вызывает `connectSuspend`; при исключении — полная остановка с `Stopped(sessionId, код)`. Возвращает `START_STICKY` для CONNECT, `START_NOT_STICKY` иначе; `intent == null` (перезапуск системой) — сразу `stopSelf`.
 - `onStartCommand(DISCONNECT)`: при `EXTRA_USER_DISCONNECT` сбрасывает `AppPreferences.connectionRequested`, останавливает сервис.
-- `connectSuspend`: `teardown()` предыдущего ядра → `VpnRunningState.publish(false)` → чистка session-файлов → `LibboxAndroidBootstrap.ensureSetup()` → чтение JSON из файла → **удаление файла** → `CommandServer(handler, this).start()` → `DefaultNetworkMonitor.start()` → `commandServer.startOrReloadService(json, OverrideOptions)` → проверка `needWIFIState` против `ACCESS_FINE_LOCATION` → `sendConnectResult(true)`.
+- `connectSuspend`: `teardown()` предыдущего ядра → чистка session-файлов → `LibboxAndroidBootstrap.ensureSetup()` → чтение JSON из файла → **удаление файла** → `CommandServer(handler, this).start()` → `DefaultNetworkMonitor.start()` → `commandServer.startOrReloadService(json, OverrideOptions)` → проверка `needWIFIState` против `ACCESS_FINE_LOCATION` → `Running(sessionId, now)`.
 - `buildOverrideOptions(policy)`: `autoRedirect=false`; для `PER_APP_ALLOWED` — `includePackage = allowed + собственный пакет`; для `PER_APP_EXCLUDED` — `excludePackage = allowed`; для `FULL_TUN` фильтра нет (собственный трафик диагностики тоже идёт через туннель, сокеты ядра защищены `protect(fd)`).
 - `openTun(TunOptions)` — реализация `PlatformInterface.openTun`: `VpnService.Builder` (MTU, адреса v4/v6, DNS, маршруты — `addRoute/excludeRoute(IpPrefix)` на API 33+, иначе `inet*RouteRange`; `addAllowedApplication/addDisallowedApplication`; опционально системный HTTP-прокси на API 29+), `establish()` → fd.
 - `teardown()`: удаляет session-файл, закрывает `tunPfd`, `DefaultNetworkMonitor.stop()`, `commandServer.closeService()/close()`.
-- `onRevoke` / `onDestroy`: остановка и публикация `running=false`.
+- `onRevoke`: остановка с `error = vpn_revoked`. `onDestroy`: teardown и `Stopped`, если ещё не опубликован. `VpnBoxHandler.serviceStop` (запрос ядра) — полная остановка, кроме вызова во время нашего же `teardown`.
 - `sendNotification`: уведомления ядра (канал по `identifier`, `IMPORTANCE_HIGH`); открываемый URL — только после `isSafeNotificationUrl`.
 - `VpnBoxHandler : CommandServerHandler`: `serviceStop`, `serviceReload`, `getSystemProxyStatus`, `setSystemProxyEnabled`, `writeDebugMessage` (только в debug, через `LogRedaction`).
 
 ### Контракты и состояние
-- `VpnConnectResultContract` — action `...VPN_CONNECT_RESULT`, extras `ok`, `message`.
-- `VpnRunningStateContract` — action `...VPN_RUNNING_STATE`, extra `running`.
-- `VpnInternalBroadcastSecurity.PERMISSION` — имя signature-permission.
-- `VpnRunningState` — `@Volatile isRunning` + флаг в SharedPreferences `nothing_vpn_running_flag` (`running`, `started_at`). `publish()` пишет синхронно (`commit`), шлёт broadcast с permission и обновляет плитку. `syncFromDisk()` вызывается при старте Activity и плитки.
+- `TunnelStatusRepository` (в `NothingVpnGraph.tunnelStatus`) — `StateFlow<TunnelStatus>` в памяти процесса, `newSessionId()`, `publish()` (обновляет плитку через `requestListeningState`). При создании удаляет устаревший `nothing_vpn_running_flag`. Подробно — [vpn-lifecycle.md](vpn-lifecycle.md).
 
 ## Пакет `libbox/` — мост к ядру
 
@@ -55,9 +51,9 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_CONFIG_PATH`, `E
 | Класс | Назначение |
 |---|---|
 | `NothingVpnGraph` | Ручной DI-контейнер (см. [architecture.md](architecture.md)) |
-| `AndroidSystemVpn` | `SystemVpnPort`. Старт: регистрирует ресивер результата, `startForegroundService(ACTION_CONNECT)`, таймаут 30 с. Стоп: `ACTION_DISCONNECT`, ожидание `running=false`, таймаут 10 с. `smokeCheck`: `LibboxProxyProbe.test("proxy")` (urlTest группы `proxy`) + HTTPS `GET https://www.gstatic.com/generate_204` (ожидается 204) + `VpnRunningState`; общий таймаут 7 с |
+| `AndroidSystemVpn` | `SystemVpnPort`, `tunnelStatus` из `TunnelStatusRepository`. Старт: `startForegroundService(ACTION_CONNECT, sessionId)`, ожидание `Running/Stopped` этой сессии, таймаут 30 с. Стоп: если уже `Stopped` — ничего; иначе `ACTION_DISCONNECT` и ожидание `Stopped`, таймаут 10 с. `smokeCheck`: `LibboxProxyProbe.test("proxy")` (urlTest группы `proxy`) + HTTPS `GET https://www.gstatic.com/generate_204` (ожидается 204) + `TunnelStatus.Running`; общий таймаут 7 с |
 | `LibboxProxyProbe` | Одноразовый `CommandClient` с no-op обработчиком для `urlTest(group)` |
-| `TunnelStatsMonitor` | Цикл: пока `VpnRunningState.isRunning`, подключается `CommandClient` с `CommandStatus` раз в секунду и публикует `StateFlow<TunnelStats>` (скорости, итоги, число соединений) |
+| `TunnelStatsMonitor` | Цикл: пока `TunnelStatus.Running`, подключается `CommandClient` с `CommandStatus` раз в секунду и публикует `StateFlow<TunnelStats>` (скорости, итоги, число соединений) |
 | `ProfileRepositoryAndroid` | `ProfileRepositoryPort` поверх `EncryptedSharedPreferences("nothing_vpn_profiles")` + `SecureStorePort` для секретов. Содержит `ProfileSecrets` и `ProfileSecretIntegrity` (проверка согласованности секрета) |
 | `ProfileStorageMigration` | Разовый перенос из старого незашифрованного DataStore (`datastore/nothing_mobile_vpn.preferences_pb`) с retry-маркером; экспонирует `awaitProfileStorageReady()` |
 | `SecureStoreAndroid` | `EncryptedSharedPreferences("nothing_vpn_secure")`, AES256-GCM/SIV |
@@ -71,12 +67,12 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_CONFIG_PATH`, `E
 | `SafeAndroidLog` | `Log.e` с редакцией; в release не пишет сообщение исключения |
 
 ## Пакет `quicksettings/`
-- `VpnQuickTileService` — плитка вкл/выкл. Клик: если запущено → `requestDisconnect` + `disconnectSuspend`; если нужно разрешение VPN → тост и открытие `MainActivity`; иначе `requestConnect` + `connectSuspend` (ошибка → тост через `UserErrorText`). Слушает `VpnRunningStateContract` (динамически, с permission). Подзаголовок на Q+ показывает время работы в минутах.
+- `VpnQuickTileService` — плитка вкл/выкл. Пока видна, подписана на `controller.state` + `tunnelStatus` и рисует `TileModel.from(...)` (чистая функция, покрыта `TileModelTest`). Клик: `Connected` → `requestDisconnect` + `disconnectSuspend`; `Disconnected/Error` → проверка разрешения VPN (нет — тост и открытие `MainActivity`), `requestConnect` + `connectSuspend` (ошибка → тост через `UserErrorText`); в переходных состояниях клик игнорируется. Команды идут в `NothingVpnApp.applicationScope`. Подзаголовок на Q+ показывает время работы в минутах.
 - `VpnQuickTileRefresh.requestUpdate` — `TileService.requestListeningState`.
 
 ## Пакет `ui/` и `MainActivity.kt`
 
-`MainActivity` (≈1800 строк) делает всё: регистрация `ActivityResult`-контрактов (QR через `zxing-android-embedded`, запрос VPN-разрешения), ресивер `VPN_RUNNING_STATE` на `onStart/onStop`, `FLAG_SECURE` (не в debug), запрос `POST_NOTIFICATIONS`, навигация и **все экраны**.
+`MainActivity` (≈1800 строк) делает всё: регистрация `ActivityResult`-контрактов (QR через `zxing-android-embedded`, запрос VPN-разрешения), `FLAG_SECURE` (не в debug), запрос `POST_NOTIFICATIONS`, навигация и **все экраны**.
 
 Навигация (`NavHost`, один общий `AppViewModel`):
 

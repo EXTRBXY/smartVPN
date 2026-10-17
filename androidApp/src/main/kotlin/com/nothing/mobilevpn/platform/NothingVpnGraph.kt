@@ -4,6 +4,7 @@ import android.content.Context
 import com.nothing.mobilecore.shared.application.SingBoxConfigCompilerPort
 import com.nothing.mobilecore.shared.application.VpnSessionController
 import com.nothing.mobilecore.shared.infrastructure.SingBoxConfigCompiler
+import com.nothing.mobilecore.vpn.TunnelStatusRepository
 
 class NothingVpnGraph(context: Context) {
     private val appContext = context.applicationContext
@@ -13,9 +14,10 @@ class NothingVpnGraph(context: Context) {
     val profileRepository = ProfileRepositoryAndroid(appContext, secureStore)
     val configCompiler: SingBoxConfigCompilerPort = SingBoxConfigCompiler()
     val singBoxCoreInfo = AndroidSingBoxCoreInfo(appContext)
-    val systemVpn = AndroidSystemVpn(appContext)
+    val tunnelStatus = TunnelStatusRepository(appContext)
+    val systemVpn = AndroidSystemVpn(appContext, tunnelStatus)
     val sessionConfigWriter = AndroidSessionConfigWriter(appContext)
-    val tunnelStatsMonitor = TunnelStatsMonitor()
+    val tunnelStatsMonitor = TunnelStatsMonitor(tunnelStatus.status)
 
     val sessionController = VpnSessionController(
         profileRepository = profileRepository,

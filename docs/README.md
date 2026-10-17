@@ -40,4 +40,4 @@ Android-first VPN-клиент для протокола **VLESS** (TLS / Realit
                 └──────────────────────────────────┘
 ```
 
-Поток «Подключить»: профиль + политика → `SingBoxConfigCompiler` → JSON-файл сессии → `ACTION_CONNECT` в `NothingVpnService` → `CommandServer.startOrReloadService(json)` → ядро вызывает `openTun` → `VpnService.Builder.establish()` → результат по broadcast → smoke-проверка → `Connected`.
+Поток «Подключить»: профиль + политика → `SingBoxConfigCompiler` → JSON-файл сессии → `ACTION_CONNECT` в `NothingVpnService` → `CommandServer.startOrReloadService(json)` → ядро вызывает `openTun` → `VpnService.Builder.establish()` → `TunnelStatus.Running` в `TunnelStatusRepository` → smoke-проверка → `Connected`.

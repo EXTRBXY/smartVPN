@@ -21,6 +21,8 @@ object UserErrorText {
                 context.getString(R.string.user_error_doh_sni_for_ip)
             "vpn_connect_timeout" ->
                 context.getString(R.string.user_error_timeout)
+            "vpn_revoked" ->
+                context.getString(R.string.user_error_vpn_revoked)
             "vpn_not_running_after_connect" ->
                 context.getString(R.string.user_error_tunnel_not_running)
             "profile_secret_unavailable" ->

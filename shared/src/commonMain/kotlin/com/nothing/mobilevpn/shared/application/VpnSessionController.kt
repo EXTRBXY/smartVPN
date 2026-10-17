@@ -2,6 +2,7 @@ package com.nothing.mobilecore.shared.application
 
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.validate
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VpnSessionState
@@ -26,10 +27,10 @@ class VpnSessionController(
     private val singBoxCoreInfo: SingBoxCoreInfoPort,
     private val systemVpn: SystemVpnPort,
     private val configWriter: SessionConfigWriter,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     private val uuidRegex =
         Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var connectJob: Job? = null
     private val connectMutex = Mutex()
 
@@ -38,7 +39,15 @@ class VpnSessionController(
 
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
-    private var lastPolicyFailClosed: Boolean = true
+
+    /** Фактическое состояние туннеля (истина платформы); [state] выравнивается по нему. */
+    val tunnelStatus: StateFlow<TunnelStatus> get() = systemVpn.tunnelStatus
+
+    init {
+        scope.launch {
+            systemVpn.tunnelStatus.collect { onTunnelStatus(it) }
+        }
+    }
 
     fun importVlessLink(link: String): Result<VlessProfile> = runCatching {
         VlessLinkParser.parse(link.trim())
@@ -55,11 +64,10 @@ class VpnSessionController(
 
     suspend fun connectSuspend(): Result<Unit> = withContext(Dispatchers.Default) {
         connectMutex.withLock {
-            if (_state.value is VpnSessionState.Connecting || _state.value is VpnSessionState.Connected) {
+            if (_state.value is VpnSessionState.Connected && systemVpn.tunnelStatus.value is TunnelStatus.Running) {
                 return@withLock Result.success(Unit)
             }
             val policyForAttempts = runCatching { profileRepository.getTunnelPolicy() }.getOrElse { TunnelPolicy() }
-            lastPolicyFailClosed = policyForAttempts.failClosed
             val maxAttempts = if (policyForAttempts.failClosed) 1 else 3
             var lastFailure: Throwable? = null
             repeat(maxAttempts) { index ->
@@ -92,7 +100,14 @@ class VpnSessionController(
                     val path = configWriter.writeSessionConfig(json)
                     systemVpn.startVpn(policy, path).getOrElse { throw it }
                     systemVpn.smokeCheck(policy).getOrElse { throw it }
+                    if (systemVpn.tunnelStatus.value !is TunnelStatus.Running) error("vpn_not_running_after_connect")
                     _state.value = VpnSessionState.Connected
+                    // Туннель мог упасть между проверкой и записью: сборщик статуса тогда видел
+                    // Connecting и пропустил событие, поэтому перепроверяем после записи.
+                    if (systemVpn.tunnelStatus.value !is TunnelStatus.Running) {
+                        _state.value = VpnSessionState.Connecting
+                        error("vpn_not_running_after_connect")
+                    }
                 }
                 if (attemptResult.isSuccess) {
                     return@withLock Result.success(Unit)
@@ -163,25 +178,27 @@ class VpnSessionController(
     }
 
     /**
-     * Туннель поднят или остановлен вне этого контроллера (плитка Quick Settings и т.п.).
-     * Не вызывает [SystemVpnPort], только выравнивает [state] с реальностью.
+     * Выравнивает [state] по фактическому состоянию туннеля, когда тот меняется вне
+     * [connectSuspend]/[disconnectSuspend]: отключение из уведомления, отзыв разрешения VPN,
+     * падение сервиса. Во время подключения/отключения события игнорируются — ими управляет
+     * сам контроллер (сервис, например, кратко публикует Stopped при перезапуске ядра).
      */
-    fun applyExternalTunnelRunning(running: Boolean) {
-        if (running) {
-            _lastError.value = null
-            if (_state.value !is VpnSessionState.Connected) {
-                _state.value = VpnSessionState.Connected
+    private fun onTunnelStatus(status: TunnelStatus) {
+        when (status) {
+            is TunnelStatus.Running -> {
+                val current = _state.value
+                if (current is VpnSessionState.Disconnected || current is VpnSessionState.Error) {
+                    _lastError.value = null
+                    _state.value = VpnSessionState.Connected
+                }
             }
-        } else {
-            // The Android service deliberately publishes a short stopped state while it
-            // tears down the previous core before a new connection. It is expected during
-            // connect/recovery and must not be presented as a failed tunnel startup.
-            if (_state.value is VpnSessionState.Connecting || _state.value is VpnSessionState.Recovering) return
-            if (_state.value is VpnSessionState.Disconnected || _state.value is VpnSessionState.Disconnecting) return
-            if (lastPolicyFailClosed) {
-                _lastError.value = LogRedaction.redactUserMessage("vpn_not_running_after_connect")
+            is TunnelStatus.Stopped -> {
+                if (_state.value is VpnSessionState.Connected) {
+                    status.error?.let { _lastError.value = LogRedaction.redactUserMessage(it) }
+                    _state.value = VpnSessionState.Disconnected
+                }
             }
-            _state.value = VpnSessionState.Disconnected
+            is TunnelStatus.Starting, TunnelStatus.Stopping -> Unit
         }
     }
 

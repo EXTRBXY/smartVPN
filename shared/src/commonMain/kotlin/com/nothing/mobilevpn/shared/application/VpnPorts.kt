@@ -1,8 +1,10 @@
 package com.nothing.mobilecore.shared.application
 
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Только чтение сведений о встроенном ядре sing-box (libbox): версия и т.п.
@@ -38,6 +40,8 @@ interface ProfileRepositoryPort {
  * Platform VPN (Android VpnService / iOS NE). Implementations apply [TunnelPolicy] and system lifecycle.
  */
 interface SystemVpnPort {
+    /** Фактическое состояние туннеля; единственный источник истины (см. [TunnelStatus]). */
+    val tunnelStatus: StateFlow<TunnelStatus>
     suspend fun startVpn(policy: TunnelPolicy, singBoxConfigPath: String): Result<Unit>
     suspend fun stopVpn()
     suspend fun stopVpnAndAwait(): Result<Unit>

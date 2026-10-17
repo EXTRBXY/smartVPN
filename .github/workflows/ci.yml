@@ -32,6 +32,16 @@ jobs:
       - name: Android unit tests
         run: ./gradlew :androidApp:testDebugUnitTest
 
+      - name: Android lint
+        run: ./gradlew :androidApp:lintDebug
+
+      - name: Upload lint report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: androidApp/build/reports/lint-results-debug.html
+
   instrumented-tests:
     runs-on: ubuntu-latest
     steps:

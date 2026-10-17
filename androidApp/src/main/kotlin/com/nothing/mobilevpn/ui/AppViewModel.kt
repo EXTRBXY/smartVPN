@@ -8,6 +8,7 @@ import com.nothing.mobilecore.platform.RoutingRuleSet
 import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
+import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.validate
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VpnSessionState
@@ -36,11 +37,10 @@ class AppViewModel(
     private val controller = graph.sessionController
     private val profiles = graph.profileRepository
 
-    val sessionState: StateFlow<VpnSessionState> = controller.state.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        VpnSessionState.Disconnected,
-    )
+    // Напрямую, без stateIn с начальным Disconnected: иначе при открытии экрана во время
+    // активного туннеля на мгновение мелькало «Отключено».
+    val sessionState: StateFlow<VpnSessionState> = controller.state
+    val tunnelStatus: StateFlow<TunnelStatus> = controller.tunnelStatus
 
     val profileList: StateFlow<List<VlessProfile>> = profiles.observeProfiles().stateIn(
         viewModelScope,
@@ -51,11 +51,7 @@ class AppViewModel(
     private val _activeProfileId = MutableStateFlow<String?>(null)
     val activeProfileId: StateFlow<String?> = _activeProfileId
 
-    val lastError = controller.lastError.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        null,
-    )
+    val lastError: StateFlow<String?> = controller.lastError
     val tunnelStats = graph.tunnelStatsMonitor.stats
 
     private val _importInProgress = MutableStateFlow(false)

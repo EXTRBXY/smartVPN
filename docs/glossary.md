@@ -18,7 +18,7 @@
 | Reality | Режим TLS-маскировки (VLESS Reality): `pbk` (public key), `sid` (short id) |
 | Graph | `NothingVpnGraph` — ручной DI-контейнер |
 | Session config | Одноразовый JSON-файл `sing-box-session-*.json` с конфигом ядра |
-| Internal broadcast | Локальные `VPN_CONNECT_RESULT` и `VPN_RUNNING_STATE` с signature-permission |
+| `TunnelStatus` | Фактическое состояние туннеля (`Stopped/Starting/Running/Stopping`) в `TunnelStatusRepository`; единственный источник истины |
 
 ## Коды ошибок и их тексты (`UserErrorText`)
 
