@@ -30,8 +30,8 @@
 `TunnelPolicy.validate(): Result<Unit>` — единственная точка валидации; ошибки — строковые коды (`invalid_mtu`, `invalid_tun_ipv4_cidr`, `per_app_requires_packages`, `invalid_doh_server`, `invalid_doh_path`, `invalid_doh_sni_for_ip`, `invalid_singbox_log_level`, `invalid_tun_stack`, `invalid_package_name`, `too_many_packages`, `too_many_local_dns_domains`, `invalid_local_dns_domain`). Для IP-адреса DoH-сервера SNI обязателен.
 
 ### `VpnSessionState`
-`Disconnected | Connecting | Recovering(attempt, maxAttempts) | Connected | Disconnecting | Error(message)`.
-`Error` выставляется кратковременно и сразу сменяется `Disconnected` (текст ошибки живёт в `VpnSessionController.lastError`).
+`Disconnected | Connecting | Recovering(attempt, maxAttempts) | Connected | Disconnecting | Error(error: VpnError)`.
+`Error` выставляется кратковременно и сразу сменяется `Disconnected` (ошибка живёт в `VpnSessionController.lastError`).
 
 ### `DnsHostValidation.kt`
 `isValidIpv4`, `isValidIpv4Cidr`, `isIpHost` (IPv4/IPv6; IPv6 — упрощённая проверка регулярным выражением). `internal`/`private` — используются `TunnelPolicy` и компилятором.
@@ -43,7 +43,7 @@
 
 | Метод | Что делает |
 |---|---|
-| `state: StateFlow<VpnSessionState>`, `lastError: StateFlow<String?>` | наблюдаемое состояние; `lastError` проходит `LogRedaction.redactUserMessage` |
+| `state: StateFlow<VpnSessionState>`, `lastError: StateFlow<VpnError?>` | наблюдаемое состояние; ошибка — типизированная, см. [glossary.md](glossary.md) |
 | `importVlessLink(link): Result<VlessProfile>` | только парсинг (`VlessLinkParser`), сохранять должен вызывающий |
 | `connect()` | запуск `connectSuspend` в собственном scope, игнорируется, если уже идёт |
 | `connectSuspend(): Result<Unit>` | см. алгоритм ниже |
@@ -75,10 +75,10 @@
 ### `VlessLinkParser` / `VlessLinkFormatter`
 - Парсер — собственный разбор URI (`vless://uuid@host:port?query#name`), IPv6 в `[...]`, ручной percent-decode (`+` → пробел). Допустимо: `encryption=none`, `security ∈ {tls, reality, none}`, `type ∈ {tcp, ws, grpc}`. Для Reality обязательны `pbk`, `sid`, `sni`. Имена параметров: `sni|serverName|servername`, `serviceName|servicename`, `fp`, `alpn` (разделители `,` и `;`), `flow`, `path`, `host`. Неизвестные параметры сохраняются в `extraQuery`. Имя обрезается до 64 символов.
 - Форматтер — обратная операция (percent-encode по байтам UTF-8, IPv6 оборачивается в `[]`); требует непустой `uuid`.
-- Сообщения исключений парсера на английском и используются `UserErrorText` как ключи (`"Only vless:// links are supported."`, `"Invalid UUID format."`, `"Missing host."`, `"Invalid port."`) — хрупкая связь.
+- Ошибки парсера — `VpnException` с `VpnError.Link*`; ссылка не `vless://` → `link_not_vless`.
 
 ### `LogRedaction`
-`redactForLog` / `redactUserMessage` маскируют: UUID → `[uuid]`, `vless://...@` → `vless://[redacted]@`, `pbk=`, `sid=`, пути Windows/Unix (оставляя `[path]` для session-файлов). Внимание: unix-регулярка `/[^\s"]+` не заменяет, а сохраняет любые пути, кроме session-файлов (ветка `else path.value`) — по факту маскируются только session-пути.
+`redactForLog` маскирует: UUID → `[uuid]`, `vless://...@` → `vless://[redacted]@`, `pbk=`, `sid=`, пути Windows/Unix (оставляя `[path]` для session-файлов). Внимание: unix-регулярка `/[^\s"]+` не заменяет, а сохраняет любые пути, кроме session-файлов (ветка `else path.value`) — по факту маскируются только session-пути.
 
 ## Тесты shared
 

@@ -6,5 +6,5 @@ sealed class VpnSessionState {
     data class Recovering(val attempt: Int, val maxAttempts: Int) : VpnSessionState()
     data object Connected : VpnSessionState()
     data object Disconnecting : VpnSessionState()
-    data class Error(val message: String) : VpnSessionState()
+    data class Error(val error: VpnError) : VpnSessionState()
 }

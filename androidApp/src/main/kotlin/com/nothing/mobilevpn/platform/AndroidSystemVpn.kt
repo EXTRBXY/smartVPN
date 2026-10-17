@@ -7,6 +7,10 @@ import androidx.core.content.ContextCompat
 import com.nothing.mobilecore.shared.application.SystemVpnPort
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.VpnException
+import com.nothing.mobilecore.shared.domain.ensure
+import com.nothing.mobilecore.shared.domain.vpnFail
 import com.nothing.mobilecore.vpn.NothingVpnService
 import com.nothing.mobilecore.vpn.TunnelStatusRepository
 import kotlinx.coroutines.Dispatchers
@@ -46,15 +50,15 @@ class AndroidSystemVpn(
                 tunnelStatus.first { it.isOutcomeOf(sessionId) }
             }
             when (outcome) {
-                null -> Result.failure(Exception("vpn_connect_timeout"))
+                null -> Result.failure(VpnException(VpnError.VpnConnectTimeout))
                 is TunnelStatus.Running ->
                     if (outcome.sessionId == sessionId) {
                         Result.success(Unit)
                     } else {
-                        Result.failure(Exception("vpn_start_superseded"))
+                        Result.failure(VpnException(VpnError.VpnStartSuperseded))
                     }
-                is TunnelStatus.Stopped -> Result.failure(Exception(outcome.error ?: "vpn_start_failed"))
-                else -> Result.failure(Exception("vpn_start_superseded"))
+                is TunnelStatus.Stopped -> Result.failure(VpnException(outcome.error ?: VpnError.VpnStartFailed))
+                else -> Result.failure(VpnException(VpnError.VpnStartSuperseded))
             }
         }
 
@@ -68,11 +72,11 @@ class AndroidSystemVpn(
     override suspend fun stopVpnAndAwait(): Result<Unit> = withContext(Dispatchers.Main.immediate) {
         if (tunnelStatus.value is TunnelStatus.Stopped) return@withContext Result.success(Unit)
         runCatching { context.startService(disconnectIntent()) }
-            .onFailure { return@withContext Result.failure(Exception("vpn_stop_failed")) }
+            .onFailure { return@withContext Result.failure(VpnException(VpnError.VpnStopFailed)) }
         val stopped = withTimeoutOrNull(10_000L) {
             tunnelStatus.first { it is TunnelStatus.Stopped }
         }
-        if (stopped != null) Result.success(Unit) else Result.failure(Exception("vpn_stop_timeout"))
+        if (stopped != null) Result.success(Unit) else Result.failure(VpnException(VpnError.VpnStopTimeout))
     }
 
     private fun disconnectIntent(): Intent =
@@ -91,23 +95,21 @@ class AndroidSystemVpn(
             try {
                 withTimeout(7_000L) {
                     LibboxProxyProbe.test("proxy").getOrElse {
-                        throw IllegalStateException("smoke_proxy_failed", it)
+                        throw VpnException(VpnError.SmokeProxyFailed, it)
                     }
                     val probe = URL("https://www.gstatic.com/generate_204").openConnection() as HttpURLConnection
                     try {
                         probe.connectTimeout = 3_000
                         probe.readTimeout = 3_000
                         probe.instanceFollowRedirects = false
-                        if (probe.responseCode != 204) error("smoke_proxy_failed")
+                        ensure(probe.responseCode == 204) { VpnError.SmokeProxyFailed }
                     } finally {
                         probe.disconnect()
                     }
-                    if (tunnelStatus.value !is TunnelStatus.Running) {
-                        error("vpn_not_running_after_connect")
-                    }
+                    ensure(tunnelStatus.value is TunnelStatus.Running) { VpnError.VpnNotRunningAfterConnect }
                 }
             } catch (_: TimeoutCancellationException) {
-                error("smoke_timeout")
+                vpnFail(VpnError.SmokeTimeout)
             }
         }
     }

@@ -1,5 +1,8 @@
 package com.nothing.mobilecore.shared.infrastructure
 
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.ensure
+import com.nothing.mobilecore.shared.domain.vpnFail
 import com.nothing.mobilecore.shared.application.SingBoxConfigCompilerPort
 import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.isIpHost
@@ -62,7 +65,7 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
     }
 
     private fun buildVlessOutbound(profile: VlessProfile): JsonObject = buildJsonObject {
-        require(profile.uuid.isNotBlank()) { "profile_secret_unavailable" }
+        ensure(profile.uuid.isNotBlank()) { VpnError.ProfileSecretUnavailable }
         put("type", JsonPrimitive("vless"))
         put("tag", JsonPrimitive("proxy-node"))
         put("server", JsonPrimitive(profile.host))
@@ -90,9 +93,9 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
             }
             if (profile.security == "reality") {
                 val publicKey = profile.realityPublicKey?.takeIf { it.isNotBlank() }
-                    ?: error("reality_public_key_missing")
+                    ?: vpnFail(VpnError.ProfileRealityIncomplete)
                 val shortId = profile.realityShortId?.takeIf { it.isNotBlank() }
-                    ?: error("reality_short_id_missing")
+                    ?: vpnFail(VpnError.ProfileRealityIncomplete)
                 put("reality", buildJsonObject {
                     put("enabled", JsonPrimitive(true))
                     put("public_key", JsonPrimitive(publicKey))

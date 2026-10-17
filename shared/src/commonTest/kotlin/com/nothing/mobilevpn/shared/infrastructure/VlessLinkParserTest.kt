@@ -1,5 +1,7 @@
 package com.nothing.mobilecore.shared.infrastructure
 
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.VpnException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -34,17 +36,19 @@ class VlessLinkParserTest {
 
     @Test
     fun rejects_non_vless() {
-        assertFailsWith<IllegalArgumentException> {
+        val e = assertFailsWith<VpnException> {
             VlessLinkParser.parse("https://example.com")
         }
+        assertEquals(VpnError.LinkNotVless, e.error)
     }
 
     @Test
     fun rejects_bad_encryption() {
-        assertFailsWith<IllegalArgumentException> {
+        val e = assertFailsWith<VpnException> {
             VlessLinkParser.parse(
                 "vless://12345678-1234-4123-8123-123456789abc@h:1?encryption=aes128&type=tcp&security=tls",
             )
         }
+        assertEquals(VpnError.LinkUnsupported, e.error)
     }
 }

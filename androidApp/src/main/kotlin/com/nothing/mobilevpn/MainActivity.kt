@@ -92,6 +92,7 @@ import com.nothing.mobilecore.BuildConfig
 import com.nothing.mobilecore.shared.domain.DnsMode
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelStatus
+import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnSessionState
 import com.nothing.mobilecore.ui.AppViewModel
 import com.nothing.mobilecore.ui.UserErrorText
@@ -331,7 +332,7 @@ private fun HomeRoute(
                         TextButton(onClick = { showErrorDetails = !showErrorDetails }) { Text("Подробности") }
                     }
                     if (showErrorDetails) {
-                        Text(it, style = MaterialTheme.typography.bodySmall)
+                        Text(it.code, style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
@@ -824,7 +825,7 @@ private fun DnsRoute(vm: AppViewModel, onBack: () -> Unit, onDnsApps: () -> Unit
         status = if (result.isSuccess) {
             context.getString(R.string.save_success)
         } else {
-            UserErrorText.from(context, result.exceptionOrNull()?.message)
+            UserErrorText.from(context, result.exceptionOrNull())
         }
     }
 
@@ -1007,7 +1008,7 @@ private fun ProfileEditRoute(
                     .padding(16.dp),
             ) {
                 Text(
-                    text = UserErrorText.from(context, "profile_not_found"),
+                    text = UserErrorText.from(context, VpnError.ProfileNotFound),
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -1147,7 +1148,7 @@ private fun ProfileEditRoute(
                             onBack()
                         } else {
                             statusIsError = true
-                            statusMessage = UserErrorText.from(context, result.exceptionOrNull()?.message)
+                            statusMessage = UserErrorText.from(context, result.exceptionOrNull())
                         }
                     }
                 },
@@ -1174,7 +1175,7 @@ private fun ProfileEditRoute(
                             onBack()
                         } else {
                             statusIsError = true
-                            statusMessage = UserErrorText.from(context, result.exceptionOrNull()?.message)
+                            statusMessage = UserErrorText.from(context, result.exceptionOrNull())
                         }
                     }
                 }) { Text("Удалить") }
@@ -1337,7 +1338,7 @@ private fun ImportRoute(vm: AppViewModel, onBack: () -> Unit) {
                     vm.importLink(normalizedLink) { r ->
                         msg = r.fold(
                             onSuccess = { context.getString(R.string.import_success_prefix, it.name) },
-                            onFailure = { UserErrorText.from(context, it.message) },
+                            onFailure = { UserErrorText.from(context, it) },
                         )
                         msgIsError = r.isFailure
                     }
@@ -1608,7 +1609,7 @@ private fun AppsRoute(vm: AppViewModel, onBack: () -> Unit) {
                             saveMessage = context.getString(R.string.save_success)
                         } else {
                             saveError = true
-                            saveMessage = UserErrorText.from(context, result.exceptionOrNull()?.message)
+                            saveMessage = UserErrorText.from(context, result.exceptionOrNull())
                         }
                     }
                 },

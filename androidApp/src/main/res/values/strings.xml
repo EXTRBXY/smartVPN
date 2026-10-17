@@ -16,6 +16,15 @@
     <string name="qs_tile_per_app_empty">Укажите приложения для режима «только выбранные»</string>
     <string name="user_error_generic">Не удалось выполнить операцию. Повторите попытку.</string>
     <string name="user_error_select_profile">Сначала выберите активный профиль.</string>
+    <string name="user_error_no_reachable_profile">Ни один профиль не ответил. Проверьте сеть.</string>
+    <string name="user_error_local_dns_domains">Проверьте список локальных DNS-доменов.</string>
+    <string name="user_error_vpn_permission">Нет разрешения VPN. Откройте приложение и разрешите VPN.</string>
+    <string name="user_error_vpn_start_failed">Не удалось запустить VPN. Попробуйте снова.</string>
+    <string name="user_error_vpn_stop_failed">Не удалось корректно остановить VPN. Попробуйте снова.</string>
+    <string name="user_error_tun_establish">Android не смог создать VPN-туннель. Проверьте разрешение VPN и наличие другого VPN-приложения.</string>
+    <string name="user_error_core_tls">Не удалось установить защищённое соединение. Проверьте TLS/Reality и время на устройстве.</string>
+    <string name="user_error_core_dns">Не удалось разрешить адрес. Проверьте настройки DNS.</string>
+    <string name="user_error_core_unreachable">Сервер не отвечает. Проверьте сеть, адрес и порт профиля.</string>
     <string name="user_error_split_tunnel_packages">Проверьте список приложений для раздельной маршрутизации.</string>
     <string name="user_error_policy_network_params">Проверьте сетевые параметры VPN-политики.</string>
     <string name="user_error_doh_params">Проверьте параметры DNS over HTTPS.</string>
@@ -24,8 +33,6 @@
     <string name="user_error_vpn_revoked">VPN отключён системой или другим VPN-приложением.</string>
     <string name="user_error_tunnel_not_running">Туннель не подтвердил запуск. Попробуйте подключиться снова.</string>
     <string name="user_error_secret_unavailable">Секреты профиля недоступны. Переимпортируйте профиль.</string>
-    <string name="user_error_health_dns">Проверка туннеля не прошла: проблема DNS.</string>
-    <string name="user_error_health_tcp">Проверка туннеля не прошла: нет сетевой связности.</string>
     <string name="user_error_health_proxy">Проверка туннеля не прошла: прокси-сервер недоступен.</string>
     <string name="user_error_health_timeout">Проверка туннеля заняла слишком много времени.</string>
     <string name="user_error_needs_location">Для текущего режима нужен доступ к геоданным (точное местоположение).</string>
@@ -33,6 +40,8 @@
     <string name="user_error_only_vless">Поддерживаются только ссылки vless://</string>
     <string name="user_error_invalid_uuid">Некорректный UUID в ссылке.</string>
     <string name="user_error_invalid_host_or_port">Проверьте адрес сервера и порт в ссылке.</string>
+    <string name="user_error_link_invalid">Ссылка повреждена или неполная.</string>
+    <string name="user_error_link_unsupported">Параметры ссылки не поддерживаются (нужны encryption=none, tls/reality/none, tcp/ws/grpc).</string>
     <string name="user_error_profile_delete_requires_disconnect">Отключите VPN перед удалением активного профиля.</string>
     <string name="user_error_profile_name_required">Укажите имя профиля.</string>
     <string name="user_error_profile_host_required">Укажите адрес сервера.</string>

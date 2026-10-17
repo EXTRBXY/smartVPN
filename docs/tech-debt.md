@@ -11,7 +11,8 @@
 Введён `TunnelStatus` + `TunnelStatusRepository` (`StateFlow` в памяти процесса), broadcast и флаг на диске удалены, контроллер подписан на статус. См. [vpn-lifecycle.md](vpn-lifecycle.md). Исходное описание:
 `VpnSessionController.state` (память), `VpnRunningState` (prefs + `@Volatile` + broadcast) и жизненное состояние сервиса. Выравнивание — `applyExternalTunnelRunning` с набором исключений для промежуточных состояний. Это источник гонок (плитка, автоматизация, Activity). Кандидат: единый `StateFlow` состояния в сервисе/репозитории состояния, доступный всем компонентам одного процесса, broadcast убрать.
 
-### 3. Хрупкие строковые коды и тексты ошибок
+### 3. ~~Хрупкие строковые коды и тексты ошибок~~ — сделано
+Введены `VpnError`/`VpnException`, единый `toVpnError()` и исчерпывающий `UserErrorText`; см. [glossary.md](glossary.md). Исходное описание:
 - Ошибки — произвольные `String`-сообщения исключений, `UserErrorText` сопоставляет по равенству и по подстрокам (`"tls"`, `"connect"` и т.д.), включая английские тексты парсера.
 - Часть кодов не имеет отдельного текста, часть текстов (`smoke_dns_failed`, `smoke_tcp_failed`) не порождается.
 - Рекомендация: sealed-иерархия `VpnError`/enum в `shared`, один маппер в UI.

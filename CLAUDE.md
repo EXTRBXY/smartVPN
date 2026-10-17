@@ -49,7 +49,7 @@ Windows / PowerShell, JDK 17, из корня:
 ## Инварианты безопасности (проверяй при любых правках затрагиваемых мест)
 
 1. **Секреты** (`uuid`, `realityPublicKey`, `realityShortId`) хранятся только в `SecureStoreAndroid` (EncryptedSharedPreferences). В списке профилей они обнуляются (`stripSecrets`). Не клади их в логи, `Intent`, `SharedPreferences` в открытом виде.
-2. **Логи** — только через `LogRedaction` / `SafeAndroidLog` / `ConnectionEventLog`. Новые сообщения об ошибках, уходящие пользователю или в журнал, проходят `redactUserMessage`.
+2. **Логи** — только через `LogRedaction` / `SafeAndroidLog` / `ConnectionEventLog`. Пользователю уходят только `VpnError` (фиксированные тексты из `strings.xml`), а не текст исключений.
 3. **Состояние туннеля** передаётся внутри процесса через `TunnelStatusRepository` (`StateFlow`), внутренних broadcast нет. Если всё же понадобится broadcast — `setPackage` + signature-permission + `RECEIVER_NOT_EXPORTED`.
 4. **Session config** (`sing-box-session-*.json` и `.json.tmp`) лежит в `noBackupFilesDir`, читается сервисом и **удаляется до старта ядра**; чистка не должна трогать `keepPath` и его `.tmp`-пару.
 5. `workingPath` libbox — внутреннее хранилище (`filesDir/runtime`).
@@ -59,7 +59,7 @@ Windows / PowerShell, JDK 17, из корня:
 ## Подводные камни
 
 - Истина о туннеле — `TunnelStatus` в `TunnelStatusRepository` (только память процесса, пишет только `NothingVpnService`). `VpnSessionState` контроллера — состояние UI-стороны, выравнивается по `TunnelStatus` подпиской внутри контроллера. Не сохраняй «running» на диск: после смерти процесса туннель гарантированно мёртв, а сохранённый флаг уже давал ложное «Вкл» на плитке. Промежуточный `Stopped` при reconnect — ожидаемый, не ошибка.
-- Ошибки передаются **строковыми кодами** (`no_active_profile`, `smoke_proxy_failed`, …) и мапятся в текст в `ui/UserErrorText.kt`. Новый код ошибки = правка там и в `strings.xml`.
+- Ошибки — `enum VpnError` (`shared/domain/VpnError.kt`), бросаются через `ensure { }` / `vpnFail()`, любое исключение превращается в ошибку только через `toVpnError()`. Новый код = значение в enum + ветка в `ui/UserErrorText.kt` (исчерпывающий `when`, иначе не соберётся) + строка в `strings.xml`. Не сравнивай `exception.message` со строками.
 - Доступ к профилям/политике ждёт `ProfileStorageMigration.awaitProfileStorageReady()` — новые методы репозитория должны делать то же.
 - `failClosed=true` означает «одна попытка без ретраев», а не Android Kill Switch. Настройка `autoReconnect` в UI инвертирует это поле.
 - `MainActivity.kt` (~1800 строк) содержит почти все экраны; `AppViewModel` — единственный ViewModel, общий для всех маршрутов.

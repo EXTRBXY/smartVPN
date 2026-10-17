@@ -1,6 +1,9 @@
 package com.nothing.mobilecore.shared.infrastructure
 
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.ensure
+import com.nothing.mobilecore.shared.domain.vpnFail
 import okio.ByteString.Companion.toByteString
 
 object VlessLinkParser {
@@ -8,15 +11,16 @@ object VlessLinkParser {
         Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
 
     fun parse(link: String): VlessProfile {
-        require(link.isNotBlank()) { "Empty link." }
+        ensure(link.isNotBlank()) { VpnError.LinkInvalid }
+        ensure(link.trim().startsWith("vless://", ignoreCase = true)) { VpnError.LinkNotVless }
         val uri = parseVlessUri(link.trim())
-        require(uri.scheme.equals("vless", ignoreCase = true)) { "Only vless:// links are supported." }
+        ensure(uri.scheme.equals("vless", ignoreCase = true)) { VpnError.LinkNotVless }
 
-        val userInfo = uri.userInfo ?: throw IllegalArgumentException("Missing UUID in userinfo.")
-        require(uuidRegex.matches(userInfo)) { "Invalid UUID format." }
-        val host = uri.host ?: throw IllegalArgumentException("Missing host.")
-        val port = if (uri.port >= 0) uri.port else throw IllegalArgumentException("Invalid port.")
-        require(port in 1..65535) { "Invalid port." }
+        val userInfo = uri.userInfo ?: vpnFail(VpnError.LinkInvalidUuid)
+        ensure(uuidRegex.matches(userInfo)) { VpnError.LinkInvalidUuid }
+        val host = uri.host?.takeIf { it.isNotBlank() } ?: vpnFail(VpnError.LinkInvalidHostOrPort)
+        val port = if (uri.port >= 0) uri.port else vpnFail(VpnError.LinkInvalidHostOrPort)
+        ensure(port in 1..65535) { VpnError.LinkInvalidHostOrPort }
 
         val rawFragment = uri.fragment
         val name = if (rawFragment.isNullOrBlank()) "$host:$port" else decodeUrl(rawFragment)
@@ -25,9 +29,9 @@ object VlessLinkParser {
         val type = (query["type"] ?: "tcp").trim().lowercase()
         val security = (query["security"] ?: "tls").trim().lowercase()
         val encryption = (query["encryption"] ?: "none").trim().lowercase()
-        require(type.isNotEmpty()) { "type is empty." }
-        require(security.isNotEmpty()) { "security is empty." }
-        require(encryption.isNotEmpty()) { "encryption is empty." }
+        ensure(type.isNotEmpty()) { VpnError.LinkUnsupported }
+        ensure(security.isNotEmpty()) { VpnError.LinkUnsupported }
+        ensure(encryption.isNotEmpty()) { VpnError.LinkUnsupported }
 
         val fingerprint = query["fp"]?.trim()?.takeIf { it.isNotEmpty() }
         val sni = query["sni"] ?: query["serverName"] ?: query["servername"]
@@ -50,13 +54,13 @@ object VlessLinkParser {
             if (!isKnownKey(k)) extra[k] = v
         }
 
-        require(encryption == "none") { "Only encryption=none is supported for VLESS links." }
-        require(security in setOf("tls", "reality", "none")) { "Unsupported security. Expected tls|reality|none." }
-        require(type in setOf("tcp", "ws", "grpc")) { "Unsupported type. Expected tcp|ws|grpc." }
+        ensure(encryption == "none") { VpnError.LinkUnsupported }
+        ensure(security in setOf("tls", "reality", "none")) { VpnError.LinkUnsupported }
+        ensure(type in setOf("tcp", "ws", "grpc")) { VpnError.LinkUnsupported }
         if (security == "reality") {
-            require(pbk != null) { "Reality requires pbk." }
-            require(sid != null) { "Reality requires sid." }
-            require(sniTrim != null) { "Reality requires sni." }
+            ensure(pbk != null) { VpnError.LinkRealityIncomplete }
+            ensure(sid != null) { VpnError.LinkRealityIncomplete }
+            ensure(sniTrim != null) { VpnError.LinkRealityIncomplete }
         }
 
         val profile = VlessProfile(
@@ -84,7 +88,7 @@ object VlessLinkParser {
 
     private fun parseVlessUri(raw: String): ParsedUri {
         val withoutScheme = raw.removePrefix("vless:").removePrefix("VLESS:")
-        require(withoutScheme.startsWith("//")) { "Invalid URI." }
+        ensure(withoutScheme.startsWith("//")) { VpnError.LinkInvalid }
         val rest = withoutScheme.drop(2)
         val fragmentIdx = rest.indexOf('#')
         val beforeFrag = if (fragmentIdx >= 0) rest.substring(0, fragmentIdx) else rest
@@ -95,14 +99,14 @@ object VlessLinkParser {
         val query = if (qIdx >= 0) beforeFrag.substring(qIdx + 1) else null
 
         val atIdx = authorityAndPath.indexOf('@')
-        require(atIdx > 0) { "Missing UUID in userinfo." }
+        ensure(atIdx > 0) { VpnError.LinkInvalidUuid }
         val userInfo = authorityAndPath.substring(0, atIdx)
         val hostPort = authorityAndPath.substring(atIdx + 1)
         val host: String
         val port: Int
         if (hostPort.startsWith('[')) {
             val endBracket = hostPort.indexOf(']')
-            require(endBracket > 0) { "Invalid host." }
+            ensure(endBracket > 0) { VpnError.LinkInvalidHostOrPort }
             host = hostPort.substring(1, endBracket)
             val after = hostPort.substring(endBracket + 1)
             port = if (after.startsWith(':')) after.drop(1).toIntOrNull() ?: -1 else -1

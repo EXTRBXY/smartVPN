@@ -21,6 +21,4 @@ object LogRedaction {
             .replace(unixPathRegex) { path ->
                 if (sessionFileRegex.containsMatchIn(path.value)) "[path]" else path.value
             }
-
-    fun redactUserMessage(text: String): String = redactForLog(text)
 }

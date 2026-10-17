@@ -13,7 +13,9 @@ import com.nothing.mobilecore.MainActivity
 import com.nothing.mobilecore.NothingVpnApp
 import com.nothing.mobilecore.R
 import com.nothing.mobilecore.shared.domain.TunnelStatus
+import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnSessionState
+import com.nothing.mobilecore.shared.domain.toVpnError
 import com.nothing.mobilecore.ui.UserErrorText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,10 +103,9 @@ class VpnQuickTileService : TileService() {
             val result = graph.sessionController.connectSuspend()
             result.exceptionOrNull()?.let { err ->
                 withContext(Dispatchers.Main) {
-                    val text = if (err.message == "no_active_profile" || err.message == "profile_not_found") {
-                        getString(R.string.qs_tile_no_profile_toast)
-                    } else {
-                        UserErrorText.from(app, err.message)
+                    val text = when (err.toVpnError()) {
+                        VpnError.NoActiveProfile, VpnError.ProfileNotFound -> getString(R.string.qs_tile_no_profile_toast)
+                        else -> UserErrorText.from(app, err)
                     }
                     Toast.makeText(app, text, Toast.LENGTH_SHORT).show()
                 }

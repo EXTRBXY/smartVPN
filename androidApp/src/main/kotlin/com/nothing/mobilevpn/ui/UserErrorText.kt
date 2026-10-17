@@ -1,75 +1,63 @@
 package com.nothing.mobilecore.ui
 
 import android.content.Context
+import androidx.annotation.StringRes
 import com.nothing.mobilecore.R
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.toVpnError
 
+/** Текст ошибки для пользователя. Новый [VpnError] без строки здесь не скомпилируется. */
 object UserErrorText {
-    fun from(context: Context, raw: String?): String {
-        val code = raw?.trim().orEmpty()
-        if (code.isEmpty()) return context.getString(R.string.user_error_generic)
-        return when (code) {
-            "no_active_profile", "profile_not_found" -> context.getString(R.string.user_error_select_profile)
-            "per_app_requires_packages", "invalid_package_name", "too_many_packages" ->
-                context.getString(R.string.user_error_split_tunnel_packages)
-            "invalid_mtu", "invalid_tun_ipv4_cidr", "invalid_tun_stack", "invalid_singbox_log_level" ->
-                context.getString(R.string.user_error_policy_network_params)
-            "invalid_doh_server", "invalid_doh_path" ->
-                context.getString(R.string.user_error_doh_params)
-            "invalid_local_dns_domain", "too_many_local_dns_domains" ->
-                "Проверьте список локальных DNS-доменов."
-            "invalid_doh_sni_for_ip" ->
-                context.getString(R.string.user_error_doh_sni_for_ip)
-            "vpn_connect_timeout" ->
-                context.getString(R.string.user_error_timeout)
-            "vpn_revoked" ->
-                context.getString(R.string.user_error_vpn_revoked)
-            "vpn_not_running_after_connect" ->
-                context.getString(R.string.user_error_tunnel_not_running)
-            "profile_secret_unavailable" ->
-                context.getString(R.string.user_error_secret_unavailable)
-            "smoke_dns_failed" ->
-                context.getString(R.string.user_error_health_dns)
-            "smoke_tcp_failed" ->
-                context.getString(R.string.user_error_health_tcp)
-            "smoke_proxy_failed" ->
-                context.getString(R.string.user_error_health_proxy)
-            "smoke_timeout" ->
-                context.getString(R.string.user_error_health_timeout)
-            "wifi_state_needs_fine_location" ->
-                context.getString(R.string.user_error_needs_location)
-            "reality_public_key_missing", "reality_short_id_missing" ->
-                context.getString(R.string.user_error_reality_profile)
-            "Only vless:// links are supported." ->
-                context.getString(R.string.user_error_only_vless)
-            "Invalid UUID format." ->
-                context.getString(R.string.user_error_invalid_uuid)
-            "Missing host.", "Invalid port." ->
-                context.getString(R.string.user_error_invalid_host_or_port)
-            "profile_delete_requires_disconnect" ->
-                context.getString(R.string.user_error_profile_delete_requires_disconnect)
-            "profile_name_required" ->
-                context.getString(R.string.user_error_profile_name_required)
-            "profile_host_required" ->
-                context.getString(R.string.user_error_profile_host_required)
-            "profile_port_invalid" ->
-                context.getString(R.string.user_error_profile_port_invalid)
-            "profile_uuid_invalid" ->
-                context.getString(R.string.user_error_profile_uuid_invalid)
-            "profile_reality_incomplete" ->
-                context.getString(R.string.user_error_profile_reality_incomplete)
-            "profile_id_immutable" ->
-                context.getString(R.string.user_error_profile_id_immutable)
-            else -> when {
-                code.contains("tls", true) || code.contains("certificate", true) || code.contains("reality", true) ->
-                    "Не удалось установить защищённое соединение. Проверьте TLS/Reality и время на устройстве."
-                code.contains("dns", true) || code.contains("resolve", true) ->
-                    "Не удалось разрешить адрес. Проверьте настройки DNS."
-                code.contains("timeout", true) || code.contains("connect", true) ->
-                    "Сервер не отвечает. Проверьте сеть, адрес и порт профиля."
-                code.contains("tun", true) ->
-                    "Android не смог создать VPN-туннель. Проверьте разрешение VPN и наличие другого VPN-приложения."
-                else -> context.getString(R.string.user_error_generic)
-            }
-        }
+    fun from(context: Context, error: Throwable?): String =
+        from(context, error?.toVpnError())
+
+    fun from(context: Context, error: VpnError?): String =
+        context.getString(error?.let(::textRes) ?: R.string.user_error_generic)
+
+    @StringRes
+    private fun textRes(error: VpnError): Int = when (error) {
+        VpnError.NoActiveProfile, VpnError.ProfileNotFound -> R.string.user_error_select_profile
+        VpnError.NoReachableProfile -> R.string.user_error_no_reachable_profile
+        VpnError.ProfileSecretUnavailable -> R.string.user_error_secret_unavailable
+        VpnError.ProfileIdImmutable -> R.string.user_error_profile_id_immutable
+        VpnError.ProfileDeleteRequiresDisconnect -> R.string.user_error_profile_delete_requires_disconnect
+        VpnError.ProfileNameRequired -> R.string.user_error_profile_name_required
+        VpnError.ProfileHostRequired -> R.string.user_error_profile_host_required
+        VpnError.ProfilePortInvalid -> R.string.user_error_profile_port_invalid
+        VpnError.ProfileUuidInvalid -> R.string.user_error_profile_uuid_invalid
+        VpnError.ProfileRealityIncomplete -> R.string.user_error_profile_reality_incomplete
+
+        VpnError.LinkNotVless -> R.string.user_error_only_vless
+        VpnError.LinkInvalid -> R.string.user_error_link_invalid
+        VpnError.LinkInvalidUuid -> R.string.user_error_invalid_uuid
+        VpnError.LinkInvalidHostOrPort -> R.string.user_error_invalid_host_or_port
+        VpnError.LinkUnsupported -> R.string.user_error_link_unsupported
+        VpnError.LinkRealityIncomplete -> R.string.user_error_reality_profile
+
+        VpnError.PerAppRequiresPackages, VpnError.InvalidPackageName, VpnError.TooManyPackages ->
+            R.string.user_error_split_tunnel_packages
+        VpnError.InvalidMtu, VpnError.InvalidTunIpv4Cidr, VpnError.InvalidTunStack, VpnError.InvalidSingBoxLogLevel ->
+            R.string.user_error_policy_network_params
+        VpnError.InvalidDohServer, VpnError.InvalidDohPath -> R.string.user_error_doh_params
+        VpnError.InvalidDohSniForIp -> R.string.user_error_doh_sni_for_ip
+        VpnError.InvalidLocalDnsDomain, VpnError.TooManyLocalDnsDomains -> R.string.user_error_local_dns_domains
+
+        VpnError.VpnPermissionMissing -> R.string.user_error_vpn_permission
+        VpnError.VpnConnectTimeout -> R.string.user_error_timeout
+        VpnError.VpnStartFailed, VpnError.VpnStartSuperseded, VpnError.EmptyConfig -> R.string.user_error_vpn_start_failed
+        VpnError.VpnStopFailed, VpnError.VpnStopTimeout -> R.string.user_error_vpn_stop_failed
+        VpnError.VpnRevoked -> R.string.user_error_vpn_revoked
+        VpnError.VpnNotRunningAfterConnect -> R.string.user_error_tunnel_not_running
+        VpnError.TunEstablishFailed -> R.string.user_error_tun_establish
+        VpnError.WifiStateNeedsFineLocation -> R.string.user_error_needs_location
+
+        VpnError.SmokeProxyFailed -> R.string.user_error_health_proxy
+        VpnError.SmokeTimeout -> R.string.user_error_health_timeout
+
+        VpnError.CoreTlsFailed -> R.string.user_error_core_tls
+        VpnError.CoreDnsFailed -> R.string.user_error_core_dns
+        VpnError.CoreServerUnreachable -> R.string.user_error_core_unreachable
+
+        VpnError.Unknown -> R.string.user_error_generic
     }
 }

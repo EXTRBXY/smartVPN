@@ -91,7 +91,7 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 
 `AppViewModel` — единственный ViewModel (создаётся фабрикой с `NothingVpnGraph`): прокси к `sessionController`/`profileRepository`/`appPreferences`, плюс прямые сетевые проверки (TCP-connect для задержки профиля/DNS/endpoint, HTTP-запрос внешнего IP на `api.ipify.org`), `findFastestProfile` (параллельные TCP-проверки), `switchActiveProfileAndReconnect`, сохранение split-tunnel и DNS-политики с `validate()` и флагами `*Saving`.
 
-`UserErrorText` — перевод кодов ошибок в строки (см. [glossary.md](glossary.md)); fallback по подстрокам (`tls`, `dns`, `timeout`, `tun`).
+`UserErrorText` — исчерпывающий перевод `VpnError` в строки `strings.xml` (см. [glossary.md](glossary.md)); классификация исключений — в `shared` (`toVpnError`).
 
 ## Тесты androidApp
 - `src/test`: `ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest` (JVM).

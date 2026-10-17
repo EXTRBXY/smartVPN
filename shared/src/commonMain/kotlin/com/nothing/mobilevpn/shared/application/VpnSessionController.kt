@@ -3,10 +3,14 @@ package com.nothing.mobilecore.shared.application
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.VpnException
+import com.nothing.mobilecore.shared.domain.ensure
+import com.nothing.mobilecore.shared.domain.toVpnError
+import com.nothing.mobilecore.shared.domain.vpnFail
 import com.nothing.mobilecore.shared.domain.validate
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VpnSessionState
-import com.nothing.mobilecore.shared.infrastructure.LogRedaction
 import com.nothing.mobilecore.shared.infrastructure.VlessLinkParser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
@@ -37,8 +41,8 @@ class VpnSessionController(
     private val _state = MutableStateFlow<VpnSessionState>(VpnSessionState.Disconnected)
     val state: StateFlow<VpnSessionState> = _state.asStateFlow()
 
-    private val _lastError = MutableStateFlow<String?>(null)
-    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+    private val _lastError = MutableStateFlow<VpnError?>(null)
+    val lastError: StateFlow<VpnError?> = _lastError.asStateFlow()
 
     /** Фактическое состояние туннеля (истина платформы); [state] выравнивается по нему. */
     val tunnelStatus: StateFlow<TunnelStatus> get() = systemVpn.tunnelStatus
@@ -52,7 +56,7 @@ class VpnSessionController(
     fun importVlessLink(link: String): Result<VlessProfile> = runCatching {
         VlessLinkParser.parse(link.trim())
     }.onFailure { e ->
-        _lastError.value = e.message?.let { LogRedaction.redactUserMessage(it) }
+        _lastError.value = e.toVpnError()
     }
 
     fun connect() {
@@ -80,33 +84,30 @@ class VpnSessionController(
                 _lastError.value = null
                 val attemptResult = runCatching {
                     val profileId = profileRepository.getActiveProfileId()
-                        ?: error("no_active_profile")
+                        ?: vpnFail(VpnError.NoActiveProfile)
                     val profile = profileRepository.listProfiles().find { it.id == profileId }
-                        ?: error("profile_not_found")
-                    if (profile.uuid.isBlank()) {
-                        error("profile_secret_unavailable")
-                    }
-                    if (profile.security == "reality" &&
-                        (profile.realityPublicKey.isNullOrBlank() || profile.realityShortId.isNullOrBlank())
-                    ) {
-                        error("profile_secret_unavailable")
-                    }
+                        ?: vpnFail(VpnError.ProfileNotFound)
+                    ensure(profile.uuid.isNotBlank()) { VpnError.ProfileSecretUnavailable }
+                    ensure(
+                        profile.security != "reality" ||
+                            (!profile.realityPublicKey.isNullOrBlank() && !profile.realityShortId.isNullOrBlank()),
+                    ) { VpnError.ProfileSecretUnavailable }
                     val policy = profileRepository.getTunnelPolicy()
                     policy.validate().getOrElse { throw it }
-                    if (policy.routingMode == RoutingMode.PER_APP_ALLOWED && policy.allowedPackageNames.isEmpty()) {
-                        error("per_app_requires_packages")
+                    ensure(policy.routingMode != RoutingMode.PER_APP_ALLOWED || policy.allowedPackageNames.isNotEmpty()) {
+                        VpnError.PerAppRequiresPackages
                     }
                     val json = configCompiler.compile(profile, policy).getOrElse { throw it }
                     val path = configWriter.writeSessionConfig(json)
                     systemVpn.startVpn(policy, path).getOrElse { throw it }
                     systemVpn.smokeCheck(policy).getOrElse { throw it }
-                    if (systemVpn.tunnelStatus.value !is TunnelStatus.Running) error("vpn_not_running_after_connect")
+                    ensure(systemVpn.tunnelStatus.value is TunnelStatus.Running) { VpnError.VpnNotRunningAfterConnect }
                     _state.value = VpnSessionState.Connected
                     // Туннель мог упасть между проверкой и записью: сборщик статуса тогда видел
                     // Connecting и пропустил событие, поэтому перепроверяем после записи.
                     if (systemVpn.tunnelStatus.value !is TunnelStatus.Running) {
                         _state.value = VpnSessionState.Connecting
-                        error("vpn_not_running_after_connect")
+                        vpnFail(VpnError.VpnNotRunningAfterConnect)
                     }
                 }
                 if (attemptResult.isSuccess) {
@@ -118,11 +119,11 @@ class VpnSessionController(
                     delay(1_000L shl (attempt - 1))
                 }
             }
-            val msg = lastFailure?.message ?: "connect_failed"
-            _lastError.value = LogRedaction.redactUserMessage(msg)
-            _state.value = VpnSessionState.Error(msg)
+            val error = lastFailure?.toVpnError() ?: VpnError.Unknown
+            _lastError.value = error
+            _state.value = VpnSessionState.Error(error)
             _state.value = VpnSessionState.Disconnected
-            Result.failure(lastFailure ?: IllegalStateException("connect_failed"))
+            Result.failure(lastFailure ?: VpnException(error))
         }
     }
 
@@ -134,7 +135,7 @@ class VpnSessionController(
             systemVpn.stopVpnAndAwait().getOrElse { throw it }
             _state.value = VpnSessionState.Disconnected
         }.onFailure { e ->
-            _lastError.value = LogRedaction.redactUserMessage(e.message ?: "disconnect_failed")
+            _lastError.value = e.toVpnError()
             _state.value = VpnSessionState.Disconnected
         }
     }
@@ -145,19 +146,19 @@ class VpnSessionController(
 
     suspend fun updateProfileSuspend(profileId: String, draft: VlessProfile): Result<Unit> = withContext(Dispatchers.Default) {
         runCatching {
-            if (draft.id != profileId) error("profile_id_immutable")
-            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: error("profile_not_found")
+            ensure(draft.id == profileId) { VpnError.ProfileIdImmutable }
+            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: vpnFail(VpnError.ProfileNotFound)
             val normalized = normalizeProfileForSave(draft.copy(id = existing.id))
             validateProfileForSave(normalized).getOrElse { throw it }
             profileRepository.upsert(normalized)
         }.onFailure { e ->
-            _lastError.value = LogRedaction.redactUserMessage(e.message ?: "profile_update_failed")
+            _lastError.value = e.toVpnError()
         }
     }
 
     suspend fun deleteProfileSuspend(profileId: String): Result<Unit> = withContext(Dispatchers.Default) {
         runCatching {
-            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: error("profile_not_found")
+            val existing = profileRepository.listProfiles().find { it.id == profileId } ?: vpnFail(VpnError.ProfileNotFound)
             val activeId = profileRepository.getActiveProfileId()
             val isDeletingActive = activeId == existing.id
             val stateNow = _state.value
@@ -165,15 +166,13 @@ class VpnSessionController(
                 stateNow is VpnSessionState.Connecting ||
                 stateNow is VpnSessionState.Recovering ||
                 stateNow is VpnSessionState.Disconnecting
-            if (isDeletingActive && vpnIsActive) {
-                error("profile_delete_requires_disconnect")
-            }
+            ensure(!(isDeletingActive && vpnIsActive)) { VpnError.ProfileDeleteRequiresDisconnect }
             profileRepository.delete(existing.id)
             if (isDeletingActive) {
                 profileRepository.setActiveProfileId(null)
             }
         }.onFailure { e ->
-            _lastError.value = LogRedaction.redactUserMessage(e.message ?: "profile_delete_failed")
+            _lastError.value = e.toVpnError()
         }
     }
 
@@ -194,7 +193,7 @@ class VpnSessionController(
             }
             is TunnelStatus.Stopped -> {
                 if (_state.value is VpnSessionState.Connected) {
-                    status.error?.let { _lastError.value = LogRedaction.redactUserMessage(it) }
+                    status.error?.let { _lastError.value = it }
                     _state.value = VpnSessionState.Disconnected
                 }
             }
@@ -218,15 +217,14 @@ class VpnSessionController(
     }
 
     private fun validateProfileForSave(profile: VlessProfile): Result<Unit> = runCatching {
-        if (profile.name.isBlank()) error("profile_name_required")
-        if (profile.host.isBlank()) error("profile_host_required")
-        if (profile.port !in 1..65535) error("profile_port_invalid")
-        if (!uuidRegex.matches(profile.uuid)) error("profile_uuid_invalid")
-        if (profile.security == "reality") {
-            if (profile.realityPublicKey.isNullOrBlank() || profile.realityShortId.isNullOrBlank()) {
-                error("profile_reality_incomplete")
-            }
-        }
+        ensure(profile.name.isNotBlank()) { VpnError.ProfileNameRequired }
+        ensure(profile.host.isNotBlank()) { VpnError.ProfileHostRequired }
+        ensure(profile.port in 1..65535) { VpnError.ProfilePortInvalid }
+        ensure(uuidRegex.matches(profile.uuid)) { VpnError.ProfileUuidInvalid }
+        ensure(
+            profile.security != "reality" ||
+                (!profile.realityPublicKey.isNullOrBlank() && !profile.realityShortId.isNullOrBlank()),
+        ) { VpnError.ProfileRealityIncomplete }
     }
 }
 

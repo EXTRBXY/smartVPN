@@ -4,6 +4,7 @@ import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnSessionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -283,10 +284,10 @@ class VpnSessionControllerRecoveryTest {
         val ctrl = newController(systemVpn)
         assertTrue(ctrl.connectSuspend().isSuccess)
 
-        systemVpn.tunnelStatus.value = TunnelStatus.Stopped(sessionId = 1, error = "vpn_revoked")
+        systemVpn.tunnelStatus.value = TunnelStatus.Stopped(sessionId = 1, error = VpnError.VpnRevoked)
 
         awaitState(ctrl, VpnSessionState.Disconnected)
-        assertEquals("vpn_revoked", ctrl.lastError.value)
+        assertEquals(VpnError.VpnRevoked, ctrl.lastError.value)
     }
 
     @Test
@@ -415,7 +416,7 @@ class VpnSessionControllerRecoveryTest {
             if (connectDelayMs > 0) delay(connectDelayMs)
             startCalls++
             return if (startCalls <= failStartTimes) {
-                tunnelStatus.value = TunnelStatus.Stopped(startCalls.toLong(), "start_failed")
+                tunnelStatus.value = TunnelStatus.Stopped(startCalls.toLong(), VpnError.VpnStartFailed)
                 Result.failure(IllegalStateException("start_failed"))
             } else {
                 tunnelStatus.value = TunnelStatus.Running(startCalls.toLong(), startedAtMillis = 0L)

@@ -50,34 +50,34 @@ private val acceptedLogLevels = setOf("trace", "debug", "info", "warn", "error")
 private val acceptedTunStacks = setOf("mixed", "system", "gvisor")
 
 fun TunnelPolicy.validate(): Result<Unit> = runCatching {
-    require(mtu in 1280..9000) { "invalid_mtu" }
-    require(isValidIpv4Cidr(tunIpv4Cidr)) { "invalid_tun_ipv4_cidr" }
+    ensure(mtu in 1280..9000) { VpnError.InvalidMtu }
+    ensure(isValidIpv4Cidr(tunIpv4Cidr)) { VpnError.InvalidTunIpv4Cidr }
     if (routingMode == RoutingMode.PER_APP_ALLOWED) {
-        require(allowedPackageNames.isNotEmpty()) { "per_app_requires_packages" }
+        ensure(allowedPackageNames.isNotEmpty()) { VpnError.PerAppRequiresPackages }
     }
     if (dnsMode == DnsMode.DOH) {
         val host = dohServer.trim()
-        require(dohHostRegex.matches(host)) { "invalid_doh_server" }
-        require(!host.all { it.isDigit() || it == '.' } || isValidIpv4(host)) { "invalid_doh_server" }
-        require(dohPath.startsWith("/")) { "invalid_doh_path" }
+        ensure(dohHostRegex.matches(host)) { VpnError.InvalidDohServer }
+        ensure(!host.all { it.isDigit() || it == '.' } || isValidIpv4(host)) { VpnError.InvalidDohServer }
+        ensure(dohPath.startsWith("/")) { VpnError.InvalidDohPath }
         val sni = dohSni?.trim().orEmpty()
         if (isIpHost(host) && sni.isBlank()) {
-            error("invalid_doh_sni_for_ip")
+            vpnFail(VpnError.InvalidDohSniForIp)
         }
     }
     val logLevel = singBoxLogLevel.trim().lowercase()
-    require(logLevel in acceptedLogLevels) { "invalid_singbox_log_level" }
+    ensure(logLevel in acceptedLogLevels) { VpnError.InvalidSingBoxLogLevel }
     val stack = tunStack.trim().lowercase()
-    require(stack in acceptedTunStacks) { "invalid_tun_stack" }
+    ensure(stack in acceptedTunStacks) { VpnError.InvalidTunStack }
 
     // Ограничиваем размер списка и пустые значения, чтобы не создавать невалидные include/exclude.
     val normalizedCount = allowedPackageNames.count { it.isNotBlank() }
-    require(normalizedCount == allowedPackageNames.size) { "invalid_package_name" }
-    require(normalizedCount <= 4096) { "too_many_packages" }
-    require(localDnsDomains.size <= 128) { "too_many_local_dns_domains" }
-    require(systemDnsPackageNames.size <= 4096 && systemDnsPackageNames.all { it.isNotBlank() }) { "invalid_package_name" }
-    require(localDnsDomains.all { domain ->
+    ensure(normalizedCount == allowedPackageNames.size) { VpnError.InvalidPackageName }
+    ensure(normalizedCount <= 4096) { VpnError.TooManyPackages }
+    ensure(localDnsDomains.size <= 128) { VpnError.TooManyLocalDnsDomains }
+    ensure(systemDnsPackageNames.size <= 4096 && systemDnsPackageNames.all { it.isNotBlank() }) { VpnError.InvalidPackageName }
+    ensure(localDnsDomains.all { domain ->
         val value = domain.trim().trimStart('.')
         value.isNotEmpty() && value.length <= 253 && dohHostRegex.matches(value)
-    }) { "invalid_local_dns_domain" }
+    }) { VpnError.InvalidLocalDnsDomain }
 }

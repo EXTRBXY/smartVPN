@@ -20,23 +20,20 @@
 | Session config | Одноразовый JSON-файл `sing-box-session-*.json` с конфигом ядра |
 | `TunnelStatus` | Фактическое состояние туннеля (`Stopped/Starting/Running/Stopping`) в `TunnelStatusRepository`; единственный источник истины |
 
-## Коды ошибок и их тексты (`UserErrorText`)
+## Ошибки (`VpnError`) и их тексты (`UserErrorText`)
 
-Контроллер/сервис передают ошибки кодами; `UserErrorText.from(context, raw)` переводит их в строку (`strings.xml`), иначе — эвристика по подстрокам и общий текст `user_error_generic`.
+Все ошибки, которые видит пользователь, — `enum class VpnError` в `shared/domain/VpnError.kt`. Бросаются как `VpnException(error)` (хелперы `ensure { }` / `vpnFail()`); `message` исключения равен стабильному `code` — он же пишется в журнал.
 
-| Код | Источник | Смысл |
+`Throwable.toVpnError()` — единственная точка классификации: `VpnException` (в т.ч. в цепочке `cause`) → точный код в `message` → код внутри `message` (ошибки из `openTun`, вернувшиеся через ядро) → эвристика по тексту ядра (`tls/certificate/reality`, `dns/resolve`, `timeout/connect`, `tun`) → `Unknown`.
+
+`UserErrorText.from(context, VpnError | Throwable)` — исчерпывающий `when` по `VpnError` → `strings.xml`. Новый код без текста не скомпилируется.
+
+| Группа | Коды | Источник |
 |---|---|---|
-| `no_active_profile`, `profile_not_found` | controller | не выбран/не найден профиль |
-| `profile_secret_unavailable` | controller, compiler, formatter | нет UUID/ключей Reality в защищённом хранилище |
-| `invalid_mtu`, `invalid_tun_ipv4_cidr`, `invalid_tun_stack`, `invalid_singbox_log_level` | `TunnelPolicy.validate` | сетевые параметры |
-| `per_app_requires_packages`, `invalid_package_name`, `too_many_packages` | policy/controller | split tunneling |
-| `invalid_doh_server`, `invalid_doh_path`, `invalid_doh_sni_for_ip` | policy | DoH |
-| `invalid_local_dns_domain`, `too_many_local_dns_domains` | policy | локальные DNS-домены |
-| `vpn_connect_timeout`, `vpn_stop_timeout` | `AndroidSystemVpn` | таймауты старта/остановки |
-| `vpn_not_running_after_connect` | smoke/controller | туннель не поднят |
-| `smoke_proxy_failed`, `smoke_timeout`, `smoke_dns_failed`, `smoke_tcp_failed` | smoke/health | проверки доступности (`dns`/`tcp` — зарезервированы в тексте, код сейчас формирует только `proxy`/`timeout`) |
-| `wifi_state_needs_fine_location` | сервис | ядру нужен доступ к SSID |
-| `reality_public_key_missing`, `reality_short_id_missing` | compiler | неполный Reality-профиль |
-| `profile_delete_requires_disconnect`, `profile_name_required`, `profile_host_required`, `profile_port_invalid`, `profile_uuid_invalid`, `profile_reality_incomplete`, `profile_id_immutable` | controller | CRUD профиля |
-| `empty_config`, `connectVpn_failed`, `vpn_start_failed`, `connect_failed`, `disconnect_failed`, `profile_update_failed`, `profile_delete_failed` | сервис/controller | общие; без отдельного текста → generic |
-| `"Only vless:// links are supported."`, `"Invalid UUID format."`, `"Missing host."`, `"Invalid port."` | `VlessLinkParser` | ошибки импорта (английские тексты используются как ключи) |
+| Профили | `no_active_profile`, `profile_not_found`, `no_reachable_profile`, `profile_secret_unavailable`, `profile_id_immutable`, `profile_delete_requires_disconnect`, `profile_name_required`, `profile_host_required`, `profile_port_invalid`, `profile_uuid_invalid`, `profile_reality_incomplete` | controller, compiler, ViewModel |
+| Импорт ссылки | `link_not_vless`, `link_invalid`, `link_invalid_uuid`, `link_invalid_host_or_port`, `link_unsupported`, `link_reality_incomplete` | `VlessLinkParser` |
+| Политика | `per_app_requires_packages`, `invalid_package_name`, `too_many_packages`, `invalid_mtu`, `invalid_tun_ipv4_cidr`, `invalid_tun_stack`, `invalid_singbox_log_level`, `invalid_doh_server`, `invalid_doh_path`, `invalid_doh_sni_for_ip`, `invalid_local_dns_domain`, `too_many_local_dns_domains` | `TunnelPolicy.validate`, controller |
+| Туннель | `vpn_permission_missing`, `vpn_connect_timeout`, `vpn_start_failed`, `vpn_start_superseded`, `vpn_stop_failed`, `vpn_stop_timeout`, `vpn_revoked`, `vpn_not_running_after_connect`, `tun_establish_failed`, `empty_config`, `wifi_state_needs_fine_location` | сервис, `AndroidSystemVpn`, controller |
+| Проверка | `smoke_proxy_failed`, `smoke_timeout` | `AndroidSystemVpn.smokeCheck` |
+| Ядро (по тексту) | `core_tls_failed`, `core_dns_failed`, `core_server_unreachable` | `toVpnError` |
+| Прочее | `unknown` | → `user_error_generic` |

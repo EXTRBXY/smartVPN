@@ -11,7 +11,9 @@ import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.validate
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnSessionState
+import com.nothing.mobilecore.shared.domain.vpnFail
 import com.nothing.mobilecore.shared.infrastructure.VlessLinkFormatter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,7 +53,7 @@ class AppViewModel(
     private val _activeProfileId = MutableStateFlow<String?>(null)
     val activeProfileId: StateFlow<String?> = _activeProfileId
 
-    val lastError: StateFlow<String?> = controller.lastError
+    val lastError: StateFlow<VpnError?> = controller.lastError
     val tunnelStats = graph.tunnelStatsMonitor.stats
 
     private val _importInProgress = MutableStateFlow(false)
@@ -144,7 +146,7 @@ class AppViewModel(
         coroutineScope {
             profiles.listProfiles().map { profile ->
                 async { testProfileLatency(profile.id).getOrNull()?.let { profile.id to it } }
-            }.awaitAll().filterNotNull().minByOrNull { it.second } ?: error("no_reachable_profile")
+            }.awaitAll().filterNotNull().minByOrNull { it.second } ?: vpnFail(VpnError.NoReachableProfile)
         }
     }
 
@@ -171,14 +173,14 @@ class AppViewModel(
     fun deleteRoutingRuleSet(name: String) = graph.appPreferences.deleteRoutingRuleSet(name)
 
     suspend fun exportProfile(profileId: String): Result<String> = runCatching {
-        val profile = profiles.listProfiles().firstOrNull { it.id == profileId } ?: error("profile_not_found")
+        val profile = profiles.listProfiles().firstOrNull { it.id == profileId } ?: vpnFail(VpnError.ProfileNotFound)
         VlessLinkFormatter.format(profile)
     }
 
     fun duplicateProfile(profileId: String, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch {
             onResult(runCatching {
-                val profile = profiles.listProfiles().firstOrNull { it.id == profileId } ?: error("profile_not_found")
+                val profile = profiles.listProfiles().firstOrNull { it.id == profileId } ?: vpnFail(VpnError.ProfileNotFound)
                 profiles.upsert(profile.copy(id = UUID.randomUUID().toString(), name = "${profile.name} — копия", favorite = false))
             })
         }
@@ -193,7 +195,7 @@ class AppViewModel(
 
     suspend fun testProfileLatency(profileId: String): Result<Long> = withContext(Dispatchers.IO) {
         runCatching {
-            val profile = profiles.listProfiles().firstOrNull { it.id == profileId } ?: error("profile_not_found")
+            val profile = profiles.listProfiles().firstOrNull { it.id == profileId } ?: vpnFail(VpnError.ProfileNotFound)
             val started = System.nanoTime()
             Socket().use { it.connect(InetSocketAddress(profile.host, profile.port), 4_000) }
             (System.nanoTime() - started) / 1_000_000

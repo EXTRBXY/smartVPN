@@ -12,7 +12,7 @@ package com.nothing.mobilecore.shared.domain
  * не принял за свой ответ статус предыдущей или следующей сессии.
  */
 sealed interface TunnelStatus {
-    data class Stopped(val sessionId: Long? = null, val error: String? = null) : TunnelStatus
+    data class Stopped(val sessionId: Long? = null, val error: VpnError? = null) : TunnelStatus
     data class Starting(val sessionId: Long) : TunnelStatus
     data class Running(val sessionId: Long, val startedAtMillis: Long) : TunnelStatus
     data object Stopping : TunnelStatus

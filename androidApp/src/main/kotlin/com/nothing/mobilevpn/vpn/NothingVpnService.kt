@@ -31,6 +31,10 @@ import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.infrastructure.LogRedaction
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
+import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.ensure
+import com.nothing.mobilecore.shared.domain.toVpnError
+import com.nothing.mobilecore.shared.domain.vpnFail
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.CommandServerHandler
 import io.nekohasekai.libbox.OverrideOptions
@@ -124,10 +128,10 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                         runCatching {
                             connectSuspend(policy, configPath, sessionId)
                         }.onFailure { e ->
-                            val code = e.message ?: "connectVpn_failed"
-                            ConnectionEventLog.add(this@NothingVpnService, "VPN service: start failed ($code)")
+                            val error = e.toVpnError()
+                            ConnectionEventLog.add(this@NothingVpnService, "VPN service: start failed (${error.code})")
                             SafeAndroidLog.e(VPN_LOG_TAG, "connectVpn failed", e)
-                            requestStopLocked(error = code)
+                            requestStopLocked(error = error)
                         }
                     }
                 }
@@ -144,7 +148,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
 
     override fun onRevoke() {
         // Разрешение VPN отозвано: пользователь отключил в настройках или включён другой VPN.
-        requestStop(error = "vpn_revoked")
+        requestStop(error = VpnError.VpnRevoked)
         super.onRevoke()
     }
 
@@ -167,7 +171,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     }
 
     override fun openTun(options: TunOptions): Int {
-        if (prepare(this) != null) error("android: missing vpn permission")
+        if (prepare(this) != null) vpnFail(VpnError.VpnPermissionMissing)
 
         val builder =
             Builder()
@@ -276,7 +280,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             systemProxyEnabled = false
         }
 
-        val pfd = builder.establish() ?: error("android: the application is not prepared or is revoked")
+        val pfd = builder.establish() ?: vpnFail(VpnError.TunEstablishFailed)
         tunPfd = pfd
         return pfd.fd
     }
@@ -328,7 +332,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         lastPolicy = policy
         val configFile = File(configPath)
         val content = configFile.readText()
-        if (content.isBlank()) error("empty_config")
+        ensure(content.isNotBlank()) { VpnError.EmptyConfig }
         // libbox consumes the JSON string, so the secret-bearing file is no longer needed.
         // Delete it before starting the core; crash recovery therefore does not retain credentials.
         runCatching { configFile.delete() }
@@ -343,7 +347,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         if (commandServer.needWIFIState()) {
             val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             if (fine != PackageManager.PERMISSION_GRANTED) {
-                error("wifi_state_needs_fine_location")
+                vpnFail(VpnError.WifiStateNeedsFineLocation)
             }
         }
 
@@ -397,7 +401,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         systemProxyEnabled = false
     }
 
-    private fun requestStop(error: String?) {
+    private fun requestStop(error: VpnError?) {
         if (tunnelStatus.status.value !is TunnelStatus.Stopped) {
             tunnelStatus.publish(TunnelStatus.Stopping)
         }
@@ -408,7 +412,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         }
     }
 
-    private suspend fun requestStopLocked(error: String?) {
+    private suspend fun requestStopLocked(error: VpnError?) {
         withContext(Dispatchers.IO) { teardown() }
         // Повторная остановка уже остановленного сервиса не должна затирать причину прошлой остановки.
         if (tunnelStatus.status.value !is TunnelStatus.Stopped) {
