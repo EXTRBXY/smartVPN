@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -91,7 +92,7 @@ internal fun HomeRoute(
     var showErrorDetails by rememberSaveable { mutableStateOf(false) }
     var showAddMenu by remember { mutableStateOf(false) }
     var profileActionStatus by rememberSaveable { mutableStateOf<String?>(null) }
-    var clockNow by remember { mutableStateOf(System.currentTimeMillis()) }
+    var clockNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val displayedProfiles = remember(profiles) {
         profiles.sortedWith(
             compareByDescending<VlessProfile> { it.favorite }

@@ -1,12 +1,12 @@
 # Сборка, тесты, окружение
 
 ## Требования
-- Windows (основная среда разработки), PowerShell; JDK 17 (toolchain-resolver `foojay` подключён в `settings.gradle.kts`), Android SDK (compileSdk 35), Android Studio — последняя стабильная.
+- Windows (основная среда разработки), PowerShell; JDK 17 (toolchain-resolver `foojay` подключён в `settings.gradle.kts`), Android SDK (Platform 37.0, `sdkmanager "platforms;android-37.0"`), Android Studio — последняя стабильная.
 - `androidApp/libs/libbox.aar` — без него `preBuild` падает задачей `checkLibboxAar` с подсказкой.
 - Для iOS-таргетов `shared` нужен macOS; на Windows они пропускаются (`kotlin.native.ignoreDisabledTargets=true`).
 
 ## Версии и параметры (`gradle.properties`, `build.gradle.kts`)
-AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compileSdk/targetSdk 35 · minSdk 26 · JVM 17 · `org.gradle.jvmargs=-Xmx3g` · `versionCode=1`, `versionName=0.1.0` (захардкожены в `androidApp/build.gradle.kts`).
+AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compileSdk 37 · targetSdk 35 · minSdk 26 (в `gradle.properties`) · JVM 17 · `org.gradle.jvmargs=-Xmx3g` · `versionCode`/`versionName` — в `androidApp/build.gradle.kts`.
 
 ## Команды
 
