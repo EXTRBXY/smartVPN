@@ -44,12 +44,6 @@ private val appIconBitmapCache: LruCache<String, Bitmap> =
 
 private fun appIconCacheKey(packageName: String, sizePx: Int): String = "$packageName#$sizePx"
 
-internal data class InstalledAppEntry(
-    val packageName: String,
-    val label: String,
-    val isSystem: Boolean,
-)
-
 @Composable
 internal fun AppPickerRow(
     pm: PackageManager,

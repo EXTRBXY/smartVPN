@@ -8,7 +8,6 @@ import com.nothing.mobilecore.platform.TunnelStatsMonitor
 import com.nothing.mobilecore.shared.application.ConnectivityProbePort
 import com.nothing.mobilecore.shared.application.ProfileRepositoryPort
 import com.nothing.mobilecore.shared.application.VpnSessionController
-import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
@@ -91,19 +90,12 @@ class HomeViewModel(
         }
     }
 
-    suspend fun getTunnelPolicy(): TunnelPolicy = profiles.getTunnelPolicy()
-
-    fun setRoutingMode(mode: RoutingMode) {
-        viewModelScope.launch {
-            val cur = profiles.getTunnelPolicy()
-            profiles.setTunnelPolicy(
-                cur.copy(
-                    routingMode = mode,
-                    allowedPackageNames = if (mode == RoutingMode.FULL_TUN) emptyList() else cur.allowedPackageNames,
-                ),
-            )
-        }
-    }
+    /** Текущая политика — для карточки «Маршрутизация»; null, пока хранилище не загрузилось. */
+    val policy: StateFlow<TunnelPolicy?> = profiles.observeTunnelPolicy().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        null,
+    )
 
     /** Время TCP-соединения с сервером профиля; не проверка VLESS/Reality. */
     suspend fun testProfileLatency(profileId: String): Result<Long> = runCatching {

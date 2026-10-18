@@ -6,9 +6,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class RoutingMode {
     FULL_TUN,
-    /** Only [TunnelPolicy.allowedPackageNames] use the VPN; all other apps bypass. */
+    /** Через VPN идут только [TunnelPolicy.includedPackageNames]; остальные приложения — мимо. */
     PER_APP_ALLOWED,
-    /** All apps use the VPN except [TunnelPolicy.allowedPackageNames] (bypass / split exclude). */
+    /** Через VPN идут все приложения, кроме [TunnelPolicy.excludedPackageNames]. */
     PER_APP_EXCLUDED,
 }
 
@@ -22,11 +22,14 @@ enum class DnsMode {
 data class TunnelPolicy(
     val routingMode: RoutingMode = RoutingMode.FULL_TUN,
     /**
-     * Meaning depends on [routingMode]:
-     * - [RoutingMode.PER_APP_ALLOWED]: packages that use the tunnel.
-     * - [RoutingMode.PER_APP_EXCLUDED]: packages that bypass the tunnel.
+     * Приложения для режима [RoutingMode.PER_APP_ALLOWED]. Хранятся независимо от режима:
+     * переключение на «весь трафик» или «в обход» выбор не стирает. Ключ в хранилище —
+     * исторический `allowedPackageNames` (до схемы v2 в нём лежал общий список обоих режимов).
      */
-    val allowedPackageNames: List<String> = emptyList(),
+    @SerialName("allowedPackageNames")
+    val includedPackageNames: List<String> = emptyList(),
+    /** Приложения для режима [RoutingMode.PER_APP_EXCLUDED] — идут мимо VPN. */
+    val excludedPackageNames: List<String> = emptyList(),
     /** IPv4 CIDR for TUN address (must match VpnService and sing-box inbound). */
     val tunIpv4Cidr: String = "198.18.0.1/30",
     val mtu: Int = 1500,
@@ -54,7 +57,7 @@ fun TunnelPolicy.validate(): Result<Unit> = runCatching {
     ensure(mtu in 1280..9000) { VpnError.InvalidMtu }
     ensure(isValidIpv4Cidr(tunIpv4Cidr)) { VpnError.InvalidTunIpv4Cidr }
     if (routingMode == RoutingMode.PER_APP_ALLOWED) {
-        ensure(allowedPackageNames.isNotEmpty()) { VpnError.PerAppRequiresPackages }
+        ensure(includedPackageNames.isNotEmpty()) { VpnError.PerAppRequiresPackages }
     }
     if (dnsMode == DnsMode.DOH) {
         val host = dohServer.trim()
@@ -67,9 +70,10 @@ fun TunnelPolicy.validate(): Result<Unit> = runCatching {
         }
     }
     // Ограничиваем размер списка и пустые значения, чтобы не создавать невалидные include/exclude.
-    val normalizedCount = allowedPackageNames.count { it.isNotBlank() }
-    ensure(normalizedCount == allowedPackageNames.size) { VpnError.InvalidPackageName }
-    ensure(normalizedCount <= 4096) { VpnError.TooManyPackages }
+    listOf(includedPackageNames, excludedPackageNames).forEach { packages ->
+        ensure(packages.all { it.isNotBlank() }) { VpnError.InvalidPackageName }
+        ensure(packages.size <= 4096) { VpnError.TooManyPackages }
+    }
     ensure(localDnsDomains.size <= 128) { VpnError.TooManyLocalDnsDomains }
     ensure(systemDnsPackageNames.size <= 4096 && systemDnsPackageNames.all { it.isNotBlank() }) { VpnError.InvalidPackageName }
     ensure(localDnsDomains.all { domain ->
@@ -77,3 +81,22 @@ fun TunnelPolicy.validate(): Result<Unit> = runCatching {
         value.isNotEmpty() && value.length <= 253 && dohHostRegex.matches(value)
     }) { VpnError.InvalidLocalDnsDomain }
 }
+
+/** Пакеты, которые реально применяются в текущем [TunnelPolicy.routingMode]. */
+val TunnelPolicy.activePackageNames: List<String>
+    get() = when (routingMode) {
+        RoutingMode.FULL_TUN -> emptyList()
+        RoutingMode.PER_APP_ALLOWED -> includedPackageNames
+        RoutingMode.PER_APP_EXCLUDED -> excludedPackageNames
+    }
+
+/**
+ * Перенос из схемы с одним общим списком (хранилище v1): в режиме «в обход» тот список
+ * означал исключения, поэтому переносим его в [TunnelPolicy.excludedPackageNames].
+ */
+fun TunnelPolicy.splitLegacyPackageList(): TunnelPolicy =
+    if (routingMode == RoutingMode.PER_APP_EXCLUDED && excludedPackageNames.isEmpty() && includedPackageNames.isNotEmpty()) {
+        copy(includedPackageNames = emptyList(), excludedPackageNames = includedPackageNames)
+    } else {
+        this
+    }

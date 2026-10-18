@@ -13,7 +13,7 @@ class TunnelPolicyValidationTest {
 
     @Test
     fun validate_rejectsEmptyPerAppAllowedList() {
-        val result = TunnelPolicy(routingMode = RoutingMode.PER_APP_ALLOWED, allowedPackageNames = emptyList()).validate()
+        val result = TunnelPolicy(routingMode = RoutingMode.PER_APP_ALLOWED, includedPackageNames = emptyList()).validate()
         assertFalse(result.isSuccess)
     }
 
@@ -80,5 +80,33 @@ class TunnelPolicyValidationTest {
             dohSni = "example.com",
         ).validate()
         assertFalse(result.isSuccess)
+    }
+
+    @Test
+    fun legacyExcludedList_isMovedToExcludedPackages() {
+        val legacy = TunnelPolicy(routingMode = RoutingMode.PER_APP_EXCLUDED, includedPackageNames = listOf("a.b"))
+        val split = legacy.splitLegacyPackageList()
+        assertTrue(split.includedPackageNames.isEmpty())
+        assertTrue(split.excludedPackageNames == listOf("a.b"))
+    }
+
+    @Test
+    fun legacyAllowedList_staysIncluded() {
+        val legacy = TunnelPolicy(routingMode = RoutingMode.PER_APP_ALLOWED, includedPackageNames = listOf("a.b"))
+        assertTrue(legacy.splitLegacyPackageList() == legacy)
+    }
+
+    @Test
+    fun activePackages_followMode() {
+        val policy = TunnelPolicy(includedPackageNames = listOf("in"), excludedPackageNames = listOf("out"))
+        assertTrue(policy.activePackageNames.isEmpty())
+        assertTrue(policy.copy(routingMode = RoutingMode.PER_APP_ALLOWED).activePackageNames == listOf("in"))
+        assertTrue(policy.copy(routingMode = RoutingMode.PER_APP_EXCLUDED).activePackageNames == listOf("out"))
+    }
+
+    @Test
+    fun validate_excludedModeAllowsEmptyListButAllowedModeDoesNot() {
+        assertTrue(TunnelPolicy(routingMode = RoutingMode.PER_APP_EXCLUDED).validate().isSuccess)
+        assertFalse(TunnelPolicy(routingMode = RoutingMode.PER_APP_ALLOWED, excludedPackageNames = listOf("x")).validate().isSuccess)
     }
 }

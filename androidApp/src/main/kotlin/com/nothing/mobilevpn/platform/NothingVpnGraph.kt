@@ -33,6 +33,7 @@ class NothingVpnGraph(context: Context) {
     val tunnelStatsMonitor = TunnelStatsMonitor(tunnelStatus.status)
     val connectivityProbe: ConnectivityProbePort = AndroidConnectivityProbe()
     val wifiInfo = WifiInfoProvider(appContext)
+    val installedApps = InstalledAppsRepository(appContext)
     val eventLog = EventLogStore(appContext)
 
     val sessionController = VpnSessionController(

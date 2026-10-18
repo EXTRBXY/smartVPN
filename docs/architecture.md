@@ -72,4 +72,4 @@ NothingVpnGraph(context)
 
 ## Расширение под iOS
 
-Заложено: таргеты iOS в `shared`, порты платформы. Не сделано: `iosApp`, `PacketTunnelProvider`, реализации портов на Keychain/NE. Часть `TunnelPolicy` Android-специфична (`allowedPackageNames`, `systemDnsPackageNames`, `tunStack`) — при добавлении iOS её нужно вынести в платформенный раздел policy.
+Заложено: таргеты iOS в `shared`, порты платформы. Не сделано: `iosApp`, `PacketTunnelProvider`, реализации портов на Keychain/NE. Часть `TunnelPolicy` Android-специфична (`includedPackageNames`/`excludedPackageNames`, `systemDnsPackageNames`, `tunStack`) — при добавлении iOS её нужно вынести в платформенный раздел policy.

@@ -9,7 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.nothing.mobilecore.ui.AppViewModelFactory
-import com.nothing.mobilecore.ui.apps.AppsRoute
+import com.nothing.mobilecore.ui.apps.RoutingRoute
 import com.nothing.mobilecore.ui.diagnostics.DiagnosticsRoute
 import com.nothing.mobilecore.ui.dns.DnsAppsRoute
 import com.nothing.mobilecore.ui.dns.DnsRoute
@@ -21,7 +21,7 @@ import com.nothing.mobilecore.ui.settings.SettingsRoute
 private object Routes {
     const val HOME = "home"
     const val IMPORT = "import"
-    const val APPS = "apps"
+    const val ROUTING = "routing"
     const val DNS = "dns"
     const val DNS_APPS = "dns/apps"
     const val SETTINGS = "settings"
@@ -50,8 +50,7 @@ fun AppNavGraph(
                 vm = screenViewModel(factory),
                 onImport = { nav.navigate(Routes.IMPORT) },
                 onScanQr = onScanQr,
-                onApps = { nav.navigate(Routes.APPS) },
-                onDns = { nav.navigate(Routes.DNS) },
+                onRouting = { nav.navigate(Routes.ROUTING) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },
                 onDiagnostics = { nav.navigate(Routes.DIAGNOSTICS) },
                 onEditProfile = { profileId -> nav.navigate(Routes.profileEdit(profileId)) },
@@ -59,12 +58,14 @@ fun AppNavGraph(
             )
         }
         composable(Routes.IMPORT) { ImportRoute(vm = screenViewModel(factory), onBack = back) }
-        composable(Routes.APPS) { AppsRoute(vm = screenViewModel(factory), onBack = back) }
+        composable(Routes.ROUTING) { RoutingRoute(vm = screenViewModel(factory), onBack = back) }
         composable(Routes.DNS) {
             DnsRoute(vm = screenViewModel(factory), onBack = back, onDnsApps = { nav.navigate(Routes.DNS_APPS) })
         }
         composable(Routes.DNS_APPS) { DnsAppsRoute(vm = screenViewModel(factory), onBack = back) }
-        composable(Routes.SETTINGS) { SettingsRoute(vm = screenViewModel(factory), onBack = back) }
+        composable(Routes.SETTINGS) {
+            SettingsRoute(vm = screenViewModel(factory), onBack = back, onDns = { nav.navigate(Routes.DNS) })
+        }
         composable(Routes.DIAGNOSTICS) { DiagnosticsRoute(vm = screenViewModel(factory), onBack = back) }
         composable(
             route = Routes.PROFILE_EDIT,

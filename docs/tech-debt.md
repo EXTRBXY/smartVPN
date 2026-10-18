@@ -19,11 +19,11 @@
 - Рекомендация: sealed-иерархия `VpnError`/enum в `shared`, один маппер в UI.
 
 ### 4. ~~`MainActivity.kt` — 1838 строк~~ — сделано
-Экраны разнесены по `ui/<экран>/`, навигация — `ui/navigation/AppNavGraph`, ViewModel на экран, `MainActivity` ~90 строк. Остаток: загрузка списка приложений (`PackageManager`) прямо в `AppsScreen`/`DnsAppsScreen`; `HomeScreen`/`AppsScreen` по ~400 строк. Исходное описание:
+Экраны разнесены по `ui/<экран>/`, навигация — `ui/navigation/AppNavGraph`, ViewModel на экран, `MainActivity` ~90 строк. Список приложений вынесен в `InstalledAppsRepository`, экран выбора — общий блок `AppSelection`. Исходное описание:
 Все экраны, диалоги, кэш иконок, QR-лаунчер, ресивер и навигация в одном файле, функции `private`, один общий `AppViewModel`. Трудно тестировать и ревьюить. Разнести на `ui/<screen>/…Screen.kt` + отдельные ViewModel/состояния; навигацию вынести в `NavGraph`.
 
 ### 5. ~~Слои нарушены в `AppViewModel`~~ — сделано
-Сетевые проверки — `ConnectivityProbePort` (`AndroidConnectivityProbe`), SSID — `WifiInfoProvider`, журнал — `EventLogStore`, QR-импорт — `ImportViewModel`. Остаток: `HomeViewModel`/`SettingsViewModel`/`SplitTunnelViewModel` зависят от конкретного `AppPreferences`. Исходное описание:
+Сетевые проверки — `ConnectivityProbePort` (`AndroidConnectivityProbe`), SSID — `WifiInfoProvider`, журнал — `EventLogStore`, QR-импорт — `ImportViewModel`. Остаток: `HomeViewModel`/`SettingsViewModel`/`RoutingViewModel` зависят от конкретного `AppPreferences`. Исходное описание:
 ViewModel напрямую делает сокет-соединения (`testProfileLatency`, `testDnsEndpoint`, `testServerEndpoint`), HTTP-запрос внешнего IP, читает `AppPreferences`, комбинирует политику. По правилам проекта это должно быть портом (`ConnectivityProbePort`, `ExternalIpPort`) в `application` с реализацией в `platform`. `MainActivity` также напрямую вызывает `graph.profileRepository`/`sessionController` (QR-импорт).
 
 ### 6. Расхождение имён пакета и каталогов
@@ -38,8 +38,8 @@ ViewModel напрямую делает сокет-соединения (`testPr
 Профили вынесены в `ProfileService`, `dispatcher`/`scope` внедряются. `AndroidSystemVpn` по-прежнему жёстко использует `Main.immediate`/`IO`. Исходное описание:
 Подключение, CRUD профилей, нормализация/валидация профиля, синхронизация внешнего состояния, версия ядра. Dispatchers (`Dispatchers.Default`, `Main.immediate` в `AndroidSystemVpn`) жёстко зашиты — нельзя подставить тестовый. Разделить `ConnectUseCase`, `ProfileUseCases`, инжектировать `CoroutineDispatcher`/`CoroutineScope`.
 
-### 9. ~~Типизация domain~~ — сделано (кроме имени `allowedPackageNames`)
-Enum с мягким сериализатором (`WireEnums.kt`), единый `VlessUuid` (v1–8), поле security в форме — выбор из вариантов. Остаток: имя `allowedPackageNames`. Исходное описание:
+### 9. ~~Типизация domain~~ — сделано
+Enum с мягким сериализатором (`WireEnums.kt`), единый `VlessUuid` (v1–8), поле security в форме — выбор из вариантов; списки приложений разделены на `includedPackageNames`/`excludedPackageNames` (схема хранилища v2). Исходное описание:
 `VlessProfile.type/security/encryption`, `TunnelPolicy.tunStack/singBoxLogLevel` — строки с проверками в разных местах (`validate`, парсер, компилятор, `normalizeProfileForSave`). Заменить `enum class`/value-классами; сейчас проверка UUID дублируется в `VpnSessionController` (версии 1–5) и `VlessLinkParser` (1–8).
 Имя поля `allowedPackageNames` вводит в заблуждение для режима `PER_APP_EXCLUDED`.
 

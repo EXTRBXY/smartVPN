@@ -2,6 +2,7 @@ package com.nothing.mobilecore.platform.storage
 
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.splitLegacyPackageList
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -26,8 +27,17 @@ internal data class StoredVault(
      */
     val legacyMigrationIncomplete: Boolean = false,
 ) {
+    /**
+     * Приводит содержимое старой схемы к текущей.
+     * v1 → v2: общий список приложений разделён на «через VPN» и «в обход».
+     */
+    fun upgraded(): StoredVault {
+        if (schemaVersion >= CURRENT_SCHEMA) return this
+        return copy(policy = policy.splitLegacyPackageList(), schemaVersion = CURRENT_SCHEMA)
+    }
+
     companion object {
-        const val CURRENT_SCHEMA = 1
+        const val CURRENT_SCHEMA = 2
 
         private val json = Json {
             ignoreUnknownKeys = true

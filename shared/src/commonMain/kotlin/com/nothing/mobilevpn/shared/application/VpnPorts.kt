@@ -4,6 +4,7 @@ import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -27,6 +28,9 @@ interface ProfileRepositoryPort {
     suspend fun getActiveProfileId(): String?
     suspend fun setActiveProfileId(id: String?)
     suspend fun getTunnelPolicy(): TunnelPolicy
+
+    /** Политика и её изменения. По умолчанию — однократное значение (для простых реализаций). */
+    fun observeTunnelPolicy(): Flow<TunnelPolicy> = flow { emit(getTunnelPolicy()) }
     suspend fun setTunnelPolicy(policy: TunnelPolicy)
 }
 

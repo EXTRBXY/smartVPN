@@ -43,7 +43,7 @@
 | Поле policy | Где применяется |
 |---|---|
 | `tunIpv4Cidr`, `mtu`, `tunStack`, `singBoxLogLevel`, DNS | JSON |
-| `routingMode`, `allowedPackageNames` | `OverrideOptions` (`includePackage` / `excludePackage`) |
+| `routingMode`, `includedPackageNames` / `excludedPackageNames` | `OverrideOptions` (`includePackage` / `excludePackage`) |
 | `singleConnectAttempt` | `VpnSessionController` (повторы), не ядро |
 | DoH/локальные DNS | JSON + `LocalResolver` (локальный резолвер через `DnsResolver` Android) |
 

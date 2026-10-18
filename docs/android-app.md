@@ -79,7 +79,7 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 | `ui/navigation` | `AppNavGraph` — `NavHost`, маршруты, создание ViewModel экранов |
 | `ui/home` | `HomeScreen.kt` (`HomeRoute`, `TunnelStatsCard`, форматтеры, `stateLabel`, `currentNetworkLabel`), `HomeViewModel` |
 | `ui/profiles` | `ImportScreen` + `ImportViewModel` (ручной импорт и импорт из QR), `ProfileEditScreen` + `ProfileEditViewModel` |
-| `ui/apps` | `AppsScreen` + `SplitTunnelViewModel`, `AppPicker.kt` (`AppPickerRow`, `AppPackageIcon`, LRU-кэш иконок) |
+| `ui/apps` | `RoutingScreen` + `RoutingViewModel` (режим и выбор приложений в одном месте), `AppSelection.kt` (общий блок: поиск, фильтры, массовый выбор, список), `AppPicker.kt` (`AppPickerRow`, `AppPackageIcon`, LRU-кэш иконок) |
 | `ui/dns` | `DnsScreen`, `DnsAppsScreen`, общий `DnsViewModel` |
 | `ui/settings` | `SettingsScreen` + `SettingsViewModel` |
 | `ui/diagnostics` | `DiagnosticsScreen` + `DiagnosticsViewModel` |
@@ -90,13 +90,15 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 | `home` | `HomeRoute` / `HomeViewModel` | Кнопка подключения, статистика, режим маршрутизации, список профилей (выбор, задержка, избранное, копия, поделиться, редактирование), «самый быстрый», импорт, QR, переходы |
 | `import` | `ImportRoute` / `ImportViewModel` | Ручной импорт `vless://` |
 | `profile/edit/{profileId}` | `ProfileEditRoute` / `ProfileEditViewModel` | Редактирование профиля + проверка endpoint |
-| `apps` | `AppsRoute` / `SplitTunnelViewModel` | Выбор приложений для split tunneling: фильтры, массовый выбор, иконки, сохраняемые наборы |
+| `routing` | `RoutingRoute` / `RoutingViewModel` | Режим (весь трафик / только выбранные / все, кроме выбранных) и приложения для него; у каждого режима свой список, переключение ничего не стирает; сохраняемые наборы; после сохранения при активном VPN — кнопка «Переподключить» |
 | `dns` | `DnsRoute` / `DnsViewModel` | System DNS / DoH, пресеты (Cloudflare, Google, Quad9, AdGuard), локальные домены, проверка доступности |
 | `dns/apps` | `DnsAppsRoute` / `DnsViewModel` | Приложения с системным DNS |
 | `settings` | `SettingsRoute` / `SettingsViewModel` | Автозапуск, восстановление, недоверенный Wi-Fi, доверенные сети, health-check, переход в системные VPN-настройки (Kill Switch) |
 | `diagnostics` | `DiagnosticsRoute` / `DiagnosticsViewModel` | Состояние, версия, внешний IP (по кнопке), журнал, копирование/отправка отчёта |
 
-ViewModel не делают сетевых запросов и не трогают `Context`: проверки задержки и внешнего IP идут через `ConnectivityProbePort` (`platform/AndroidConnectivityProbe`), SSID — через `WifiInfoProvider`, журнал — через `EventLogStore`. `HomeViewModel` перечитывает активный профиль при любом изменении списка профилей (его меняют импорт, QR и удаление на других экранах). Список установленных приложений (`PackageManager`) пока загружается прямо в `AppsScreen`/`DnsAppsScreen`.
+ViewModel не делают сетевых запросов и не трогают `Context`: проверки задержки и внешнего IP идут через `ConnectivityProbePort` (`platform/AndroidConnectivityProbe`), SSID — через `WifiInfoProvider`, журнал — через `EventLogStore`. `HomeViewModel` перечитывает активный профиль при любом изменении списка профилей (его меняют импорт, QR и удаление на других экранах). Список установленных приложений — `platform/InstalledAppsRepository` (кэш на время процесса, обновляется при открытии экрана), общий для маршрутизации и DNS.
+
+Главный экран: карточка состояния (активный профиль и сеть; статистика — только при подключении), карточка «Маршрутизация» (режим и число приложений; предупреждение, если в режиме «только выбранные» список пуст), профили с меню действий и кнопкой «+» (ссылка / QR). «Настройки» и «Диагностика» — иконки в верхней панели, «Настройки DNS» — в «Настройках».
 
 `UserErrorText` — исчерпывающий перевод `VpnError` в строки `strings.xml` (см. [glossary.md](glossary.md)); классификация исключений — в `shared` (`toVpnError`).
 

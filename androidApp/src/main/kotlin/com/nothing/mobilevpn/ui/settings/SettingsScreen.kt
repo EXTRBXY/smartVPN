@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +44,7 @@ import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
+internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () -> Unit) {
     val context = LocalContext.current
     val initial = remember { vm.automationSettings() }
     var autoStart by rememberSaveable { mutableStateOf(initial.autoStartAfterBoot) }
@@ -73,6 +74,12 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Text(stringResource(R.string.settings_section_network), style = MaterialTheme.typography.labelLarge)
+            OutlinedButton(onClick = onDns, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.home_dns_button))
+            }
+            HorizontalDivider()
+            Text(stringResource(R.string.settings_section_connection), style = MaterialTheme.typography.labelLarge)
             SettingSwitch(stringResource(R.string.settings_auto_start), autoStart) {
                 autoStart = it
                 vm.setAutoStart(it)

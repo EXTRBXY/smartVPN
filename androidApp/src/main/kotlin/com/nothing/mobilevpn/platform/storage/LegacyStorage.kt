@@ -7,6 +7,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.splitLegacyPackageList
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
@@ -95,7 +96,9 @@ internal object LegacyDecoder {
         if (profilesJson == null && activeProfileId == null && policyJson == null) return null
         val stored = profilesJson?.let { json.decodeFromString(ListSerializer(VlessProfile.serializer()), it) }.orEmpty()
         val profiles = stored.map { restoreSecrets(it, secretFor(it.id)) }
-        val policy = policyJson?.let { json.decodeFromString(TunnelPolicy.serializer(), it) } ?: TunnelPolicy()
+        // Старое хранилище — это схема v1 с одним общим списком приложений.
+        val policy = (policyJson?.let { json.decodeFromString(TunnelPolicy.serializer(), it) } ?: TunnelPolicy())
+            .splitLegacyPackageList()
         return StoredVault(profiles = profiles, activeProfileId = activeProfileId, policy = policy)
     }
 

@@ -2,6 +2,8 @@ package com.nothing.mobilecore.ui.dns
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nothing.mobilecore.platform.InstalledApp
+import com.nothing.mobilecore.platform.InstalledAppsRepository
 import com.nothing.mobilecore.shared.application.ConnectivityProbePort
 import com.nothing.mobilecore.shared.application.ProfileRepositoryPort
 import com.nothing.mobilecore.shared.domain.DnsMode
@@ -16,7 +18,15 @@ import kotlinx.coroutines.launch
 class DnsViewModel(
     private val profiles: ProfileRepositoryPort,
     private val probe: ConnectivityProbePort,
+    private val installedApps: InstalledAppsRepository? = null,
 ) : ViewModel() {
+
+    /** Установленные приложения для экрана «Приложения с системным DNS»; null — ещё грузятся. */
+    val apps: StateFlow<List<InstalledApp>?> = installedApps?.apps ?: MutableStateFlow(emptyList())
+
+    fun refreshApps() {
+        installedApps?.let { repo -> viewModelScope.launch { repo.refresh() } }
+    }
 
     private val _dnsSaving = MutableStateFlow(false)
     val dnsSaving: StateFlow<Boolean> = _dnsSaving.asStateFlow()

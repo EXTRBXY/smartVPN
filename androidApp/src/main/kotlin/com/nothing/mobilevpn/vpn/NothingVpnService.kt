@@ -386,11 +386,11 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                     // tunnel. Core outbound sockets are protected in autoDetectInterfaceControl.
                 }
                 RoutingMode.PER_APP_ALLOWED -> {
-                    val pkgs = (policy.allowedPackageNames + packageName).distinct()
+                    val pkgs = (policy.includedPackageNames + packageName).distinct()
                     o.includePackage = MobilePlatformInterface.StringArray(pkgs.iterator())
                 }
                 RoutingMode.PER_APP_EXCLUDED -> {
-                    val pkgs = policy.allowedPackageNames.distinct()
+                    val pkgs = policy.excludedPackageNames.distinct()
                     o.excludePackage = MobilePlatformInterface.StringArray(pkgs.iterator())
                 }
             }

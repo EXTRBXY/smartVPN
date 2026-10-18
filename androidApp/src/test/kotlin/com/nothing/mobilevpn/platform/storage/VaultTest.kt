@@ -231,4 +231,20 @@ class VaultTest {
     fun legacyDecoder_returnsNullWhenNothingStored() {
         assertNull(LegacyDecoder.decode(null, null, null) { null })
     }
+
+    @Test
+    fun bootstrap_upgradesSchemaV1SplittingExcludedList() {
+        // Хранилище v1: в режиме «в обход» общий список означал исключения.
+        val v1 = """{"schemaVersion":1,"policy":{"routingMode":"PER_APP_EXCLUDED","allowedPackageNames":["a.b","c.d"]}}"""
+        vaultFile().write(v1.encodeToByteArray())
+
+        val (vault, outcome) = VaultBootstrap(vaultFile(), FakeLegacy(null)).load()
+
+        assertEquals(BootstrapOutcome.LOADED, outcome)
+        assertEquals(StoredVault.CURRENT_SCHEMA, vault.schemaVersion)
+        assertTrue(vault.policy.includedPackageNames.isEmpty())
+        assertEquals(listOf("a.b", "c.d"), vault.policy.excludedPackageNames)
+        // Новая схема записана на диск.
+        assertEquals(vault, StoredVault.decode(vaultFile().read()!!))
+    }
 }

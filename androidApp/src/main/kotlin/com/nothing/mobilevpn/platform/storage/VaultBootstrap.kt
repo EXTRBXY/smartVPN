@@ -44,11 +44,19 @@ internal class VaultBootstrap(
                 file.quarantine(clock())
                 return migrateOrFresh(unreadableVault = true)
             }
+        val current = upgradeSchema(vault)
         return when {
-            vault.legacyMigrationIncomplete -> mergeLateLegacy(vault)
-            vault.legacyCleanupPending -> cleanupLegacy(vault)
-            else -> vault to BootstrapOutcome.LOADED
+            current.legacyMigrationIncomplete -> mergeLateLegacy(current)
+            current.legacyCleanupPending -> cleanupLegacy(current)
+            else -> current to BootstrapOutcome.LOADED
         }
+    }
+
+    /** Миграция схемы; не записалось — не страшно, в памяти уже новая схема, запишется при изменении. */
+    private fun upgradeSchema(vault: StoredVault): StoredVault {
+        val upgraded = vault.upgraded()
+        if (upgraded != vault) runCatching { persist(upgraded) }
+        return upgraded
     }
 
     private fun cleanupLegacy(vault: StoredVault): Pair<StoredVault, BootstrapOutcome> {

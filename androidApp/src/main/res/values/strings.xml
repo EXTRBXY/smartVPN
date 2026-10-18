@@ -67,11 +67,7 @@
     <string name="save_success">Изменения сохранены.</string>
 
     <!-- Экраны (вынесено из кода) -->
-    <string name="apps_error_none_selected">Выберите хотя бы одно приложение для режима «только выбранные».</string>
-    <string name="apps_title">Раздельная маршрутизация</string>
     <string name="action_back">Назад</string>
-    <string name="apps_mode_allowed">В VPN только выбранные</string>
-    <string name="apps_mode_excluded">В обход только выбранные</string>
     <string name="apps_mode_allowed_hint">Отмеченные приложения идут через VPN, остальной трафик — мимо туннеля.</string>
     <string name="apps_mode_excluded_hint">Отмеченные приложения идут мимо VPN, всё остальное — через туннель.</string>
     <string name="apps_search_hint">Поиск по имени или пакету</string>
@@ -80,19 +76,13 @@
     <string name="apps_filter_system">Системные</string>
     <string name="apps_filter_selected">Выбранные</string>
     <string name="apps_selected_count">Выбрано: %1$d</string>
-    <string name="apps_rule_sets_hide">Скрыть наборы правил</string>
-    <string name="apps_rule_sets_show">Наборы правил</string>
     <string name="apps_rule_set_name">Имя набора</string>
-    <string name="apps_rule_set_save">Сохранить текущий набор</string>
-    <string name="apps_rule_set_applied">Набор применён. Нажмите «Сохранить».</string>
     <string name="action_delete">Удалить</string>
     <string name="apps_select_visible">Выбрать показанные</string>
     <string name="apps_clear_all">Снять все</string>
-    <string name="apps_missing_from_rule">Не установлено приложений из старого правила: %1$d. После сохранения они будут удалены.</string>
+    <string name="apps_missing_from_rule">Не установлено выбранных приложений: %1$d — они останутся в списке.</string>
     <string name="action_save">Сохранить</string>
     <string name="apps_system_app_label">%1$s · системное</string>
-    <string name="apps_section_rest">Остальные</string>
-    <string name="apps_section_all">Все приложения</string>
     <string name="apps_unsaved_title">Есть несохранённые изменения</string>
     <string name="apps_unsaved_text">Выйти без сохранения?</string>
     <string name="action_leave">Выйти</string>
@@ -128,10 +118,6 @@
     <string name="dns_check_server">Проверить DNS-сервер</string>
     <string name="action_retry">Повторить</string>
     <string name="action_details">Подробности</string>
-    <string name="home_routing_mode">Режим маршрутизации</string>
-    <string name="home_routing_full">Весь трафик</string>
-    <string name="home_routing_allowed">Через VPN только выбранные</string>
-    <string name="home_routing_excluded">Выбранные в обход, остальное через VPN</string>
     <string name="home_profiles_count">Профили (%1$d)</string>
     <string name="home_fastest_result">Минимальная задержка: %1$d мс</string>
     <string name="home_fastest_none">Доступных серверов не найдено</string>
@@ -147,7 +133,6 @@
     <string name="home_import">Импорт vless://</string>
     <string name="home_scan_qr">Сканировать QR-код</string>
     <string name="settings_title">Настройки</string>
-    <string name="home_pick_apps">Выбрать приложения…</string>
     <string name="home_export_title">Передать профиль?</string>
     <string name="home_export_warning">Ссылка содержит UUID и параметры доступа. Передавайте её только тому, кому доверяете.</string>
     <string name="home_export_chooser">Передать VPN-профиль</string>
@@ -159,8 +144,6 @@
     <string name="home_switch_failed">Переподключение не удалось</string>
     <string name="home_switch_confirm">Переподключиться</string>
     <string name="home_connected_for">Подключено: %1$s</string>
-    <string name="home_network">Сеть: %1$s</string>
-    <string name="home_speed_now">Сейчас: ↓ %1$s/с\u0020\u0020\u0020↑ %2$s/с</string>
     <string name="home_active_connections">Активных соединений: %1$d</string>
     <string name="action_connect">Подключить</string>
     <string name="network_none">нет подключения</string>
@@ -206,4 +189,28 @@
         <item>ГБ</item>
         <item>ТБ</item>
     </string-array>
+
+    <!-- Маршрутизация и главный экран (0.3) -->
+    <string name="routing_title">Маршрутизация</string>
+    <string name="routing_question">Что направлять через VPN</string>
+    <string name="routing_mode_full">Весь трафик</string>
+    <string name="routing_mode_full_hint">Все приложения работают через VPN.</string>
+    <string name="routing_mode_allowed">Только выбранные приложения</string>
+    <string name="routing_mode_excluded">Все, кроме выбранных</string>
+    <string name="routing_mode_with_count">%1$s · %2$d</string>
+    <string name="routing_selection_kept">Выбор приложений для других режимов сохранён и вернётся, если снова выбрать режим.</string>
+    <string name="routing_rule_sets">Сохранённые наборы (%1$d)</string>
+    <string name="routing_rule_set_item">%1$s (%2$d)</string>
+    <string name="routing_saved_reconnect">Сохранено. Новые правила применятся после переподключения.</string>
+    <string name="action_reconnect">Переподключить</string>
+    <string name="settings_section_network">Сеть</string>
+    <string name="settings_section_connection">Подключение</string>
+    <string name="home_add_profile">Добавить профиль</string>
+    <string name="home_no_profiles">Профилей пока нет. Добавьте ссылку vless:// или отсканируйте QR-код.</string>
+    <string name="home_profile_active">Активный</string>
+    <string name="home_profile_actions">Действия с профилем</string>
+    <string name="home_no_active_profile">Профиль не выбран</string>
+    <string name="home_traffic">↓ %1$s · ↑ %2$s (сейчас ↓ %3$s/с · ↑ %4$s/с)</string>
+    <string name="routing_rule_sets_empty">Сохранённые наборы</string>
+    <string name="routing_allowed_empty">Не выбрано ни одного приложения — VPN не подключится. Выберите приложения или другой режим.</string>
 </resources>

@@ -20,8 +20,11 @@
 
 | Поле | По умолчанию | Смысл |
 |---|---|---|
-| `routingMode` | `FULL_TUN` | `FULL_TUN` — все приложения; `PER_APP_ALLOWED` — только `allowedPackageNames`; `PER_APP_EXCLUDED` — все, кроме `allowedPackageNames` |
-| `allowedPackageNames` | `[]` | значение зависит от режима (имя поля историческое) |
+| `routingMode` | `FULL_TUN` | `FULL_TUN` — все приложения; `PER_APP_ALLOWED` — только `includedPackageNames`; `PER_APP_EXCLUDED` — все, кроме `excludedPackageNames` |
+| `includedPackageNames` (в JSON — `allowedPackageNames`) | `[]` | приложения режима «только выбранные»; хранятся независимо от режима |
+| `excludedPackageNames` | `[]` | приложения режима «все, кроме выбранных» |
+
+`activePackageNames` — список текущего режима; `splitLegacyPackageList()` — перенос из схемы с одним общим списком.
 | `tunIpv4Cidr` | `198.18.0.1/30` | адрес TUN |
 | `mtu` | `1500` | 1280..9000 |
 | `dnsMode` | `SYSTEM` | `SYSTEM` (локальный резолвер Android) или `DOH` |

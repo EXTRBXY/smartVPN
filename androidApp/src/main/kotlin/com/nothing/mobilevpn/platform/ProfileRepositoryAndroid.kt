@@ -64,6 +64,11 @@ internal class ProfileRepositoryAndroid(
         return store.state.value.policy
     }
 
+    override fun observeTunnelPolicy(): Flow<TunnelPolicy> = flow {
+        store.awaitReady()
+        emitAll(store.state.map { it.policy }.distinctUntilChanged())
+    }
+
     override suspend fun setTunnelPolicy(policy: TunnelPolicy) {
         store.update { it.copy(policy = policy) }
     }
