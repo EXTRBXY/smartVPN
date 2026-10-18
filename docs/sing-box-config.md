@@ -1,6 +1,6 @@
 # Генерация конфигурации sing-box
 
-Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Версия ядра в `libbox.aar` — **`v1.14.0-alpha.17+dirty`** (Go 1.26.2): альфа-версия, собранная из рабочей копии с незакоммиченными правками. Проверить: строка `github.com/sagernet/sing-box` в `jni/arm64-v8a/libbox.so`. Для релиза стоит собрать AAR из стабильного тега. Лицензия — `third_party/sing-box/LICENSE`; формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
+Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Версия ядра в `libbox.aar` — стабильная **`v1.14.3`** (Go 1.26.2, только `arm64-v8a`), собрана `scripts/build-libbox-aar.ps1` из тега; единственная локальная правка в дереве sing-box — разделитель `PATH` для NDK на Windows в скрипте сборки, код ядра не изменён. Проверить: строка `1.14.3` в `jni/arm64-v8a/libbox.so`. Перед обновлением ядра сверяться с https://sing-box.sagernet.org/changelog/ — Android-API libbox меняется между версиями. Лицензия — `third_party/sing-box/LICENSE`; формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
 
 ## Структура результата
 

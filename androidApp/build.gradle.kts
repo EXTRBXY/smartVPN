@@ -29,8 +29,8 @@ android {
         applicationId = providers.gradleProperty("app.applicationId").get()
         minSdk = providers.gradleProperty("android.minSdk").get().toInt()
         targetSdk = providers.gradleProperty("android.targetSdk").get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

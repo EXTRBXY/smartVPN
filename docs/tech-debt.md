@@ -59,7 +59,7 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 - Миграция DataStore → EncryptedSharedPreferences с retry-маркером может быть удалена, когда не останется старых установок.
 
 ### 13. Конфигурация sing-box
-- ~~`block` outbound~~ — убран; конфиг сверен с deprecated-списком до 1.14. Ядро в AAR — `1.14.0-alpha.17+dirty`: для релиза собрать из стабильного тега. TUN `stack` устареет в 1.15. Маршрутизации нет, кроме `hijack-dns` и `final=proxy`.
+- ~~`block` outbound~~ — убран; конфиг сверен с deprecated-списком до 1.14. Ядро в AAR — стабильная `1.14.3`. TUN `stack` устареет в 1.15. Маршрутизации нет, кроме `hijack-dns` и `final=proxy`.
 - Параметр `profile` в `buildTunInbound` не используется.
 - Поддерживаются только `tcp/ws/grpc`; нет `httpupgrade`, `h2`, `xhttp`, `mux`, multiplex, `packet_encoding`.
 - Конфиг строится руками через `buildJsonObject`; рассмотреть типизированные модели сериализации.

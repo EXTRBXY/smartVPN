@@ -205,7 +205,11 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         }
 
         if (options.autoRoute) {
-            builder.addDnsServer(options.dnsServerAddress.value)
+            // С sing-box 1.14 ядро передаёт список DNS-адресов, а не один.
+            val dnsServers = options.dnsServerAddress
+            while (dnsServers.hasNext()) {
+                builder.addDnsServer(dnsServers.next())
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val inet4RouteAddress = options.inet4RouteAddress
@@ -293,6 +297,13 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         val pfd = builder.establish() ?: vpnFail(VpnError.TunEstablishFailed)
         tunPfd = pfd
         return pfd.fd
+    }
+
+    /** Парный к [sendNotification]: ядро снимает своё уведомление по typeID. */
+    override fun cancelNotification(identifier: String, typeId: Int) {
+        ContextCompat.getMainExecutor(this).execute {
+            getSystemService(NotificationManager::class.java)?.cancel(typeId)
+        }
     }
 
     override fun sendNotification(notification: LibboxNotification) {
@@ -514,6 +525,9 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
             if (tearingDown) return
             requestStop(error = null)
         }
+
+        /** SSH-агент ядру нужен только для SSH-функций, которых в приложении нет. */
+        override fun connectSSHAgent(): Int = error("android: ssh agent is not supported")
 
         override fun serviceReload() {
             scope.launch {

@@ -6,6 +6,8 @@ import android.os.Process
 import android.system.OsConstants
 import androidx.annotation.RequiresApi
 import com.nothing.mobilecore.platform.SafeAndroidLog
+import io.nekohasekai.libbox.BridgeOptions
+import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
@@ -14,6 +16,8 @@ import io.nekohasekai.libbox.NeighborUpdateListener
 import io.nekohasekai.libbox.NetworkInterfaceIterator
 import io.nekohasekai.libbox.Notification
 import io.nekohasekai.libbox.PlatformInterface
+import io.nekohasekai.libbox.PlatformUser
+import io.nekohasekai.libbox.ShellSession
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
@@ -21,9 +25,6 @@ import java.net.Inet6Address
 import java.net.InetSocketAddress
 import java.net.InterfaceAddress
 import java.net.NetworkInterface
-import java.security.KeyStore
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 import io.nekohasekai.libbox.NetworkInterface as LibboxNetworkInterface
 
 /**
@@ -172,22 +173,39 @@ interface MobilePlatformInterface : PlatformInterface {
 
     override fun localDNSTransport(): LocalDNSTransport? = LocalResolver
 
-    @OptIn(ExperimentalEncodingApi::class)
-    override fun systemCertificates(): StringIterator {
-        val certificates = mutableListOf<String>()
-        val keyStore = KeyStore.getInstance("AndroidCAStore")
-        if (keyStore != null) {
-            keyStore.load(null, null)
-            val aliases = keyStore.aliases()
-            while (aliases.hasMoreElements()) {
-                val cert = keyStore.getCertificate(aliases.nextElement())
-                certificates.add(
-                    "-----BEGIN CERTIFICATE-----\n" + Base64.encode(cert.encoded) + "\n-----END CERTIFICATE-----",
-                )
-            }
-        }
-        return StringArray(certificates.iterator())
+    /**
+     * Имя устройства для Tailscale (как в SFA): из настроек Android, иначе «производитель модель».
+     * Наш конфиг Tailscale не использует; метод обязателен по интерфейсу.
+     */
+    override fun tailscaleHostname(): String = "${Build.MANUFACTURER} ${Build.MODEL}"
+
+    // Ниже — возможности ядра, которым в SFA нужен root (оболочка/SSH/SFTP, мост, таблица соседей).
+    // Приложение работает без root и их не использует: сообщаем ядру, что они недоступны.
+
+    override fun usePlatformShell(): Boolean = false
+
+    override fun checkPlatformShell() {
+        error("android: platform shell is not supported")
     }
+
+    override fun openShellSession(
+        user: PlatformUser,
+        command: String,
+        environment: StringIterator,
+        term: String,
+        rows: Int,
+        columns: Int,
+    ): ShellSession = error("android: platform shell is not supported")
+
+    override fun lookupUser(name: String): PlatformUser = error("android: user lookup is not supported")
+
+    override fun lookupSFTPServer(): String = error("android: sftp server is not supported")
+
+    override fun readSystemSSHHostKey(): String = error("android: ssh host key is not supported")
+
+    override fun usePlatformBridge(): Boolean = false
+
+    override fun createBridge(options: BridgeOptions): BridgeSession = error("android: bridge is not supported")
 
     private class InterfaceArray(private val iterator: Iterator<LibboxNetworkInterface>) : NetworkInterfaceIterator {
         override fun hasNext(): Boolean = iterator.hasNext()
