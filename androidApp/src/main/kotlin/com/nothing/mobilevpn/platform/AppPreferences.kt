@@ -6,7 +6,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -62,6 +64,11 @@ class AppPreferences internal constructor(
     val settings: StateFlow<AppSettings> = store.state
         .map { it.settings }
         .stateIn(scope, SharingStarted.Eagerly, current)
+
+    /** Намерение «VPN нужен» прямо из хранилища (без задержки [settings]); читать после [awaitReady]. */
+    val connectionRequestedFlow: Flow<Boolean> = store.state
+        .map { it.settings.connectionRequested }
+        .distinctUntilChanged()
 
     suspend fun awaitReady() = store.awaitReady()
 
