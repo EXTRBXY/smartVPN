@@ -31,11 +31,7 @@ object DefaultNetworkMonitor {
                 defaultNetwork = it
                 checkDefaultInterfaceUpdate(it)
             }
-            defaultNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                LibboxAndroidBootstrap.connectivity.activeNetwork
-            } else {
-                DefaultNetworkListener.get()
-            }
+            defaultNetwork = LibboxAndroidBootstrap.connectivity.activeNetwork
         }
     }
 

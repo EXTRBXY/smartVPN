@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nothing.mobilecore.R
@@ -57,6 +58,7 @@ private val dnsPresets = listOf(
 @Composable
 internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val dnsSaving by vm.dnsSaving.collectAsState()
     var dnsMode by rememberSaveable { mutableStateOf(DnsMode.SYSTEM) }
     var customHost by rememberSaveable { mutableStateOf("") }
@@ -83,7 +85,7 @@ internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Uni
     fun applyDnsResult(result: Result<Unit>) {
         statusError = result.isFailure
         status = if (result.isSuccess) {
-            context.getString(R.string.save_success)
+            resources.getString(R.string.save_success)
         } else {
             UserErrorText.from(context, result.exceptionOrNull())
         }
@@ -218,11 +220,11 @@ internal fun DnsRoute(vm: DnsViewModel, onBack: () -> Unit, onDnsApps: () -> Uni
                             vm.testDnsEndpoint(customHost).fold(
                                 onSuccess = { latency ->
                                     statusError = false
-                                    status = context.getString(R.string.dns_server_reachable, latency)
+                                    status = resources.getString(R.string.dns_server_reachable, latency)
                                 },
                                 onFailure = {
                                     statusError = true
-                                    status = context.getString(R.string.dns_server_unreachable)
+                                    status = resources.getString(R.string.dns_server_unreachable)
                                 },
                             )
                             dnsTesting = false

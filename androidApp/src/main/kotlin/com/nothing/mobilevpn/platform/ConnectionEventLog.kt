@@ -1,6 +1,7 @@
 package com.nothing.mobilecore.platform
 
 import android.content.Context
+import androidx.core.content.edit
 import com.nothing.mobilecore.shared.infrastructure.LogRedaction
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -17,7 +18,7 @@ object ConnectionEventLog {
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         val safeMessage = LogRedaction.redactForLog(message).replace(Regex("[\r\n]+"), " ").take(240)
         val updated = (listOf("$timestamp  $safeMessage") + read(context)).take(MAX_EVENTS)
-        prefs.edit().putString(KEY, updated.joinToString("\n")).apply()
+        prefs.edit { putString(KEY, updated.joinToString("\n")) }
     }
 
     fun read(context: Context): List<String> = context.applicationContext
@@ -29,7 +30,7 @@ object ConnectionEventLog {
         .toList()
 
     fun clear(context: Context) {
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).apply()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { remove(KEY) }
     }
 }
 

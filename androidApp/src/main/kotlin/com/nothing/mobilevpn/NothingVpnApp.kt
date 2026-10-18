@@ -29,14 +29,12 @@ class NothingVpnApp : Application() {
         LibboxAndroidBootstrap.ensureSetup()
         automation.start()
         graph.tunnelStatsMonitor.start()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(
-                CHANNEL_VPN,
-                getString(R.string.vpn_notification_title),
-                NotificationManager.IMPORTANCE_LOW,
-            )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
-        }
+        val ch = NotificationChannel(
+            CHANNEL_VPN,
+            getString(R.string.vpn_notification_title),
+            NotificationManager.IMPORTANCE_LOW,
+        )
+        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
     }
 
     /**

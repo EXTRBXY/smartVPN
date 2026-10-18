@@ -12,9 +12,9 @@ val libboxAar: File = file("libs/libbox.aar")
 tasks.register("checkLibboxAar") {
     doLast {
         require(libboxAar.isFile) {
-            "Нет ${libboxAar.invariantSeparatorsPath}. Соберите AAR: sing-box cmd/internal/build_libbox -target android " +
-                "(все ABI) или scripts/build-libbox-aar.ps1 при клоне sing-box в <родитель mobileVPN>/_deps/sing-box; " +
-                "см. experimental/libbox/ffi.json → DEPLOY_ANDROID."
+            "РќРµС‚ ${libboxAar.invariantSeparatorsPath}. РЎРѕР±РµСЂРёС‚Рµ AAR: sing-box cmd/internal/build_libbox -target android " +
+                "(РІСЃРµ ABI) РёР»Рё scripts/build-libbox-aar.ps1 РїСЂРё РєР»РѕРЅРµ sing-box РІ <СЂРѕРґРёС‚РµР»СЊ mobileVPN>/_deps/sing-box; " +
+                "СЃРј. experimental/libbox/ffi.json в†’ DEPLOY_ANDROID."
         }
     }
 }
@@ -23,7 +23,11 @@ tasks.named("preBuild").configure { dependsOn("checkLibboxAar") }
 
 android {
     namespace = providers.gradleProperty("app.namespace").get()
-    compileSdk = providers.gradleProperty("android.compileSdk").get().toInt()
+    compileSdk {
+        version = release(providers.gradleProperty("android.compileSdk").get().toInt()) {
+            minorApiLevel = providers.gradleProperty("android.compileSdkMinor").get().toInt()
+        }
+    }
 
     defaultConfig {
         applicationId = providers.gradleProperty("app.applicationId").get()
@@ -58,6 +62,7 @@ android {
         release {
             isDebuggable = false
             isMinifyEnabled = true
+            isShrinkResources = true
             signingConfigs.findByName("release")?.let { signingConfig = it }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -89,35 +94,37 @@ android {
 dependencies {
     implementation(mapOf("name" to "libbox", "ext" to "aar"))
     implementation(project(":shared"))
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation("androidx.appcompat:appcompat:1.8.0")
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    // С новыми Compose BOM иконки не приходят транзитивно через material3.
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.navigation:navigation-compose:2.9.8")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation("androidx.security:security-crypto:1.1.0")
+    implementation("androidx.core:core-ktx:1.18.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test:core-ktx:1.6.1")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test:core-ktx:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 
-/** Release APK: isDebuggable=false, R8, без debugImplementation-артефактов; подпись debug-keystore для локальной установки. */
+/** Release APK: isDebuggable=false, R8, Р±РµР· debugImplementation-Р°СЂС‚РµС„Р°РєС‚РѕРІ; РїРѕРґРїРёСЃСЊ debug-keystore РґР»СЏ Р»РѕРєР°Р»СЊРЅРѕР№ СѓСЃС‚Р°РЅРѕРІРєРё. */
 tasks.register("nonDebugApk") {
     group = "build"
     description =
-        "Собирает localRelease APK без режима отладки (локальная установка, debug key). Выход: build/outputs/apk/localRelease/"
+        "РЎРѕР±РёСЂР°РµС‚ localRelease APK Р±РµР· СЂРµР¶РёРјР° РѕС‚Р»Р°РґРєРё (Р»РѕРєР°Р»СЊРЅР°СЏ СѓСЃС‚Р°РЅРѕРІРєР°, debug key). Р’С‹С…РѕРґ: build/outputs/apk/localRelease/"
     dependsOn("assembleLocalRelease")
 }

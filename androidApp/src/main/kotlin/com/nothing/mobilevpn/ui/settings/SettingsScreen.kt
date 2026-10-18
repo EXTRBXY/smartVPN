@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
@@ -46,6 +47,7 @@ import androidx.core.content.ContextCompat
 @Composable
 internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val initial = remember { vm.automationSettings() }
     var autoStart by rememberSaveable { mutableStateOf(initial.autoStartAfterBoot) }
     var autoReconnect by rememberSaveable { mutableStateOf(initial.autoReconnect) }
@@ -105,8 +107,8 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () 
 
             Text(stringResource(R.string.settings_trusted_wifi), style = MaterialTheme.typography.labelLarge)
             Text(
-                currentWifi?.let { context.getString(R.string.settings_current_wifi, it) }
-                    ?: context.getString(R.string.settings_current_wifi_unknown),
+                currentWifi?.let { resources.getString(R.string.settings_current_wifi, it) }
+                    ?: resources.getString(R.string.settings_current_wifi_unknown),
                 style = MaterialTheme.typography.bodySmall,
             )
             OutlinedTextField(
@@ -119,7 +121,7 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () 
             Button(
                 onClick = {
                     vm.setTrustedWifiNames(trustedWifi.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toSet())
-                    Toast.makeText(context, context.getString(R.string.settings_trusted_saved), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.settings_trusted_saved), Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.settings_trusted_save)) }

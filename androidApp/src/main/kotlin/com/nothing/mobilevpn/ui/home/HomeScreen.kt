@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nothing.mobilecore.R
@@ -74,6 +75,7 @@ internal fun HomeRoute(
     onPrepareVpnAndConnect: (connect: () -> Unit) -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val state by vm.sessionState.collectAsState()
     val profiles by vm.profileList.collectAsState()
     val activeProfileId by vm.activeProfileId.collectAsState()
@@ -175,8 +177,8 @@ internal fun HomeRoute(
                                 scope.launch {
                                     vm.findFastestProfile().onSuccess { (id, latency) ->
                                         selectProfile(id)
-                                        profileActionStatus = context.getString(R.string.home_fastest_result, latency)
-                                    }.onFailure { profileActionStatus = context.getString(R.string.home_fastest_none) }
+                                        profileActionStatus = resources.getString(R.string.home_fastest_result, latency)
+                                    }.onFailure { profileActionStatus = resources.getString(R.string.home_fastest_none) }
                                     checkingFastest = false
                                 }
                             },
@@ -229,17 +231,17 @@ internal fun HomeRoute(
                         onToggleFavorite = { vm.setProfileFavorite(p.id, !p.favorite) },
                         onEdit = { onEditProfile(p.id) },
                         onLatency = {
-                            latencies[p.id] = context.getString(R.string.status_checking)
+                            latencies[p.id] = resources.getString(R.string.status_checking)
                             scope.launch {
                                 latencies[p.id] = vm.testProfileLatency(p.id).fold(
-                                    onSuccess = { context.getString(R.string.latency_ms, it) },
-                                    onFailure = { context.getString(R.string.status_unreachable) },
+                                    onSuccess = { resources.getString(R.string.latency_ms, it) },
+                                    onFailure = { resources.getString(R.string.status_unreachable) },
                                 )
                             }
                         },
                         onDuplicate = {
-                            vm.duplicateProfile(p.id, { context.getString(R.string.profile_copy_name, it) }) { result ->
-                                profileActionStatus = context.getString(
+                            vm.duplicateProfile(p.id, { resources.getString(R.string.profile_copy_name, it) }) { result ->
+                                profileActionStatus = resources.getString(
                                     if (result.isSuccess) R.string.home_duplicate_done else R.string.home_duplicate_failed,
                                 )
                             }
@@ -273,11 +275,11 @@ internal fun HomeRoute(
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, link)
                                     },
-                                    context.getString(R.string.home_export_chooser),
+                                    resources.getString(R.string.home_export_chooser),
                                 ),
                             )
                         }.onFailure {
-                            profileActionStatus = context.getString(R.string.home_export_failed)
+                            profileActionStatus = resources.getString(R.string.home_export_failed)
                         }
                     }
                 }) { Text(stringResource(R.string.action_send)) }
@@ -294,7 +296,7 @@ internal fun HomeRoute(
                 TextButton(onClick = {
                     pendingSwitchId = null
                     vm.switchActiveProfileAndReconnect(profileId) { result ->
-                        if (result.isFailure) profileActionStatus = context.getString(R.string.home_switch_failed)
+                        if (result.isFailure) profileActionStatus = resources.getString(R.string.home_switch_failed)
                     }
                 }) { Text(stringResource(R.string.home_switch_confirm)) }
             },
@@ -410,6 +412,7 @@ private fun TunnelStatsCard(
     onToggle: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val connected = state is VpnSessionState.Connected
     val active = connected || state is VpnSessionState.Connecting || state is VpnSessionState.Recovering
     Card(

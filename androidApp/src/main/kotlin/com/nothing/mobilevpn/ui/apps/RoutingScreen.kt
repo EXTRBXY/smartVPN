@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -49,6 +50,7 @@ import com.nothing.mobilecore.ui.UserErrorText
 @Composable
 internal fun RoutingRoute(vm: RoutingViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val pm = context.packageManager
     val state by vm.state.collectAsState()
     val apps by vm.apps.collectAsState()
@@ -104,7 +106,7 @@ internal fun RoutingRoute(vm: RoutingViewModel, onBack: () -> Unit) {
                                 if (result.isSuccess) {
                                     val connected = session is VpnSessionState.Connected
                                     offerReconnect = connected
-                                    message = context.getString(if (connected) R.string.routing_saved_reconnect else R.string.save_success)
+                                    message = resources.getString(if (connected) R.string.routing_saved_reconnect else R.string.save_success)
                                 } else {
                                     message = UserErrorText.from(context, result.exceptionOrNull())
                                 }

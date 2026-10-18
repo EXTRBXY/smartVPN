@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -125,7 +124,7 @@ private fun AppPackageIcon(
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Text(
-                    text = label.take(1).uppercase(Locale.getDefault()).ifEmpty { "·" },
+                    text = label.take(1).uppercase().ifEmpty { "·" },
                     style = MaterialTheme.typography.labelLarge,
                 )
             }

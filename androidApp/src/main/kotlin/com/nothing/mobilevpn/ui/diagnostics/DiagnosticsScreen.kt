@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import com.nothing.mobilecore.BuildConfig
 import com.nothing.mobilecore.ui.home.currentNetworkLabel
@@ -48,6 +49,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val state by vm.sessionState.collectAsState()
     val stats by vm.tunnelStats.collectAsState()
     var events by remember { mutableStateOf(vm.events()) }
@@ -58,13 +60,13 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
         buildString {
             appendLine("Nothing Mobile ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT}")
-            appendLine(context.getString(R.string.diag_report_device, Build.MANUFACTURER, Build.MODEL))
+            appendLine(resources.getString(R.string.diag_report_device, Build.MANUFACTURER, Build.MODEL))
             appendLine("VPN: ${stateLabel(context, state)}")
-            appendLine(context.getString(R.string.diag_report_network, currentNetworkLabel(context)))
-            appendLine(context.getString(R.string.diag_report_vpn_permission, context.getString(if (VpnService.prepare(context) == null) R.string.diag_permission_granted else R.string.diag_permission_missing)))
-            appendLine(context.getString(R.string.diag_report_traffic, stats.downloadTotal, stats.uploadTotal, stats.activeConnections))
-            appendLine(context.getString(R.string.diag_external_ip, externalIp ?: context.getString(R.string.diag_external_ip_unchecked)))
-            appendLine(context.getString(R.string.diag_report_events))
+            appendLine(resources.getString(R.string.diag_report_network, currentNetworkLabel(context)))
+            appendLine(resources.getString(R.string.diag_report_vpn_permission, resources.getString(if (VpnService.prepare(context) == null) R.string.diag_permission_granted else R.string.diag_permission_missing)))
+            appendLine(resources.getString(R.string.diag_report_traffic, stats.downloadTotal, stats.uploadTotal, stats.activeConnections))
+            appendLine(resources.getString(R.string.diag_external_ip, externalIp ?: resources.getString(R.string.diag_external_ip_unchecked)))
+            appendLine(resources.getString(R.string.diag_report_events))
             events.forEach { appendLine(it) }
         }
     }
@@ -97,7 +99,7 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
                 onClick = {
                     ipLoading = true
                     scope.launch {
-                        externalIp = vm.externalIp().getOrElse { context.getString(R.string.diag_external_ip_failed) }
+                        externalIp = vm.externalIp().getOrElse { resources.getString(R.string.diag_external_ip_failed) }
                         ipLoading = false
                     }
                 },
@@ -110,7 +112,7 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
                     onClick = {
                         val clipboard = context.getSystemService(ClipboardManager::class.java)
                         clipboard.setPrimaryClip(ClipData.newPlainText("Nothing Mobile diagnostics", report))
-                        Toast.makeText(context, context.getString(R.string.diag_report_copied), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, resources.getString(R.string.diag_report_copied), Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.weight(1f),
                 ) { Text(stringResource(R.string.action_copy)) }
@@ -122,7 +124,7 @@ internal fun DiagnosticsRoute(vm: DiagnosticsViewModel, onBack: () -> Unit) {
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, report)
                                 },
-                                context.getString(R.string.diag_share_report),
+                                resources.getString(R.string.diag_share_report),
                             ),
                         )
                     },

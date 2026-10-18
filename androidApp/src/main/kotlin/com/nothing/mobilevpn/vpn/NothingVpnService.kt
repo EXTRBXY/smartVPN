@@ -7,7 +7,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ProxyInfo
-import android.net.Uri
+import androidx.core.net.toUri
+import android.annotation.SuppressLint
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -125,6 +126,8 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                 }
                 val policy = policyJsonFormat.decodeFromString(TunnelPolicy.serializer(), policyJson)
                 val notification = buildNotification().build()
+                // Тип сервиса есть с API 29; ServiceCompat на более старых версиях его игнорирует.
+                @SuppressLint("InlinedApi")
                 ServiceCompat.startForeground(
                     this,
                     NOTIFICATION_ID,
@@ -309,15 +312,13 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     override fun sendNotification(notification: LibboxNotification) {
         ContextCompat.getMainExecutor(this).execute {
             val nm = getSystemService(NotificationManager::class.java)!!
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                nm.createNotificationChannel(
-                    NotificationChannel(
-                        notification.identifier,
-                        notification.typeName,
-                        NotificationManager.IMPORTANCE_HIGH,
-                    ),
-                )
-            }
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    notification.identifier,
+                    notification.typeName,
+                    NotificationManager.IMPORTANCE_HIGH,
+                ),
+            )
             val builder =
                 NotificationCompat.Builder(this, notification.identifier)
                     .setShowWhen(false)
@@ -336,7 +337,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                     PendingIntent.getActivity(
                         this,
                         0,
-                        Intent(Intent.ACTION_VIEW, Uri.parse(notification.openURL)),
+                        Intent(Intent.ACTION_VIEW, notification.openURL.toUri()),
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                     ),
                 )
@@ -452,12 +453,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     }
 
     private fun stopForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }
 
     private fun buildNotification(): NotificationCompat.Builder {
@@ -485,7 +481,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     private fun isSafeNotificationUrl(raw: String?): Boolean {
         if (raw.isNullOrBlank()) return false
         return runCatching {
-            val uri = Uri.parse(raw)
+            val uri = raw.toUri()
             val host = uri.host?.lowercase() ?: return@runCatching false
             uri.scheme.equals("https", ignoreCase = true) &&
                 !isLocalOrPrivateHost(host)

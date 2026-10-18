@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import com.nothing.mobilecore.R
 import com.nothing.mobilecore.shared.domain.VlessSecurity
@@ -47,6 +48,7 @@ internal fun ProfileEditRoute(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val profiles by vm.profileList.collectAsState()
     val profile = profiles.find { it.id == profileId }
     if (profile == null) {
@@ -182,11 +184,11 @@ internal fun ProfileEditRoute(
                         vm.testServerEndpoint(host, portText.toIntOrNull() ?: -1).fold(
                             onSuccess = {
                                 statusIsError = false
-                                statusMessage = context.getString(R.string.profile_server_reachable, it)
+                                statusMessage = resources.getString(R.string.profile_server_reachable, it)
                             },
                             onFailure = {
                                 statusIsError = true
-                                statusMessage = context.getString(R.string.profile_server_unreachable)
+                                statusMessage = resources.getString(R.string.profile_server_unreachable)
                             },
                         )
                         testingServer = false
@@ -210,7 +212,7 @@ internal fun ProfileEditRoute(
                     vm.updateProfile(profileId, updated) { result ->
                         if (result.isSuccess) {
                             statusIsError = false
-                            statusMessage = context.getString(R.string.save_success)
+                            statusMessage = resources.getString(R.string.save_success)
                             onBack()
                         } else {
                             statusIsError = true

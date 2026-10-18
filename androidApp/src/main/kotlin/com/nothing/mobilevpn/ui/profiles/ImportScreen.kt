@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import com.nothing.mobilecore.R
 import com.nothing.mobilecore.ui.UserErrorText
@@ -37,14 +38,15 @@ import com.nothing.mobilecore.ui.UserErrorText
 @Composable
 internal fun ImportRoute(vm: ImportViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     var link by rememberSaveable { mutableStateOf("") }
     var msg by rememberSaveable { mutableStateOf<String?>(null) }
     var msgIsError by rememberSaveable { mutableStateOf(false) }
     val importInProgress by vm.importInProgress.collectAsState()
     val normalizedLink = link.trim()
     val inputError = when {
-        normalizedLink.isEmpty() -> context.getString(R.string.import_hint_empty)
-        !normalizedLink.startsWith("vless://", ignoreCase = true) -> context.getString(R.string.user_error_only_vless)
+        normalizedLink.isEmpty() -> resources.getString(R.string.import_hint_empty)
+        !normalizedLink.startsWith("vless://", ignoreCase = true) -> resources.getString(R.string.user_error_only_vless)
         else -> null
     }
 
@@ -100,7 +102,7 @@ internal fun ImportRoute(vm: ImportViewModel, onBack: () -> Unit) {
                 onClick = {
                     vm.importLink(normalizedLink) { r ->
                         msg = r.fold(
-                            onSuccess = { context.getString(R.string.import_success_prefix, it.name) },
+                            onSuccess = { resources.getString(R.string.import_success_prefix, it.name) },
                             onFailure = { UserErrorText.from(context, it) },
                         )
                         msgIsError = r.isFailure

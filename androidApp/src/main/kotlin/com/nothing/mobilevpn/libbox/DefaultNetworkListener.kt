@@ -1,6 +1,5 @@
 package com.nothing.mobilecore.libbox
 
-import android.annotation.TargetApi
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -86,15 +85,9 @@ object DefaultNetworkListener {
     suspend fun start(key: Any, listener: (Network?) -> Unit) =
         networkActor.send(NetworkMessage.Start(key, listener))
 
-    suspend fun get(): Network = if (fallback) {
-        @TargetApi(23)
-        LibboxAndroidBootstrap.connectivity.activeNetwork
-            ?: error("missing default network")
-    } else {
-        NetworkMessage.Get().run {
-            networkActor.send(this)
-            response.await()
-        }
+    suspend fun get(): Network = NetworkMessage.Get().run {
+        networkActor.send(this)
+        response.await()
     }
 
     suspend fun stop(key: Any) = networkActor.send(NetworkMessage.Stop(key))
@@ -113,49 +106,24 @@ object DefaultNetworkListener {
         }
     }
 
-    private var fallback = false
     private val request =
-        NetworkRequest.Builder().apply {
-            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-            if (Build.VERSION.SDK_INT == 23) {
-                removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                removeCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
-            }
-        }.build()
+        NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+            .build()
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private fun register() {
         val cm = LibboxAndroidBootstrap.connectivity
-        when (Build.VERSION.SDK_INT) {
-            in 31..Int.MAX_VALUE ->
-                @TargetApi(31) {
-                    cm.registerBestMatchingNetworkCallback(request, Callback, mainHandler)
-                }
-
-            in 28 until 31 ->
-                @TargetApi(28) {
-                    cm.requestNetwork(request, Callback, mainHandler)
-                }
-
-            in 26 until 28 ->
-                @TargetApi(26) {
-                    cm.registerDefaultNetworkCallback(Callback, mainHandler)
-                }
-
-            in 24 until 26 ->
-                @TargetApi(24) {
-                    cm.registerDefaultNetworkCallback(Callback)
-                }
-
+        // minSdk 26: ветки для более старых API (как в SFA) не нужны.
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                cm.registerBestMatchingNetworkCallback(request, Callback, mainHandler)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ->
+                cm.requestNetwork(request, Callback, mainHandler)
             else ->
-                try {
-                    fallback = false
-                    cm.requestNetwork(request, Callback)
-                } catch (_: RuntimeException) {
-                    fallback = true
-                }
+                cm.registerDefaultNetworkCallback(Callback, mainHandler)
         }
     }
 
