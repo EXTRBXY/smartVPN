@@ -56,7 +56,7 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 | `TunnelStatsMonitor` | Цикл: пока `TunnelStatus.Running`, подключается `CommandClient` с `CommandStatus` раз в секунду и публикует `StateFlow<TunnelStats>` (скорости, итоги, число соединений) |
 | `ProfileRepositoryAndroid` | `ProfileRepositoryPort` поверх `storage/VaultStore` (профили с секретами, активный профиль, политика) |
 | `storage/*` | Зашифрованное хранилище: `KeystoreVaultCipher`, `VaultFile`, `StoredVault`, `VaultStore`, загрузка и двухфазная миграция `VaultBootstrap`, чтение старых данных `AndroidLegacySource`/`LegacyDecoder`/`ProfileSecretIntegrity`. См. [data-and-storage.md](data-and-storage.md) |
-| `AppPreferences` | Обычные `SharedPreferences("nothing_vpn_user_settings")`: флаги автоматизации, доверенные Wi-Fi, наборы маршрутизации (`RoutingRuleSet` как JSON), `connectionRequested` |
+| `AppPreferences` | Раздел `settings` зашифрованного `StoredVault`: флаги автоматизации, доверенные Wi-Fi, наборы маршрутизации (`RoutingRuleSet`), `connectionRequested`; запись через фоновую очередь |
 | `VpnAutomationCoordinator` | Автоподключение и health-монитор (см. [vpn-lifecycle.md](vpn-lifecycle.md)) |
 | `BootCompletedReceiver` | → `automation.onBootCompleted()` через `goAsync()` |
 | `AndroidSessionConfigWriter` + `SessionConfigFileLifecycle` | Запись `sing-box-session-<ts>.json` (через `.tmp` + rename) в `noBackupFilesDir`; политика очистки: ≤2 файла, возраст ≤5 мин (6 ч для явной очистки), `keepPath` неприкосновенен |

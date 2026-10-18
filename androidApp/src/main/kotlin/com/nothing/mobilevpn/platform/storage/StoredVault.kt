@@ -1,5 +1,6 @@
 package com.nothing.mobilecore.platform.storage
 
+import com.nothing.mobilecore.platform.AppSettings
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.splitLegacyPackageList
@@ -26,18 +27,24 @@ internal data class StoredVault(
      * снова и подмешиваем недостающие профили (см. [VaultBootstrap]).
      */
     val legacyMigrationIncomplete: Boolean = false,
+    /** Настройки приложения (автоматизация, наборы приложений, «VPN нужен»); с схемы v3. */
+    val settings: AppSettings = AppSettings(),
+    /** Настройки из старого открытого SharedPreferences уже перенесены (или их не было). */
+    val legacySettingsImported: Boolean = false,
 ) {
     /**
      * Приводит содержимое старой схемы к текущей.
      * v1 → v2: общий список приложений разделён на «через VPN» и «в обход».
+     * v2 → v3: добавлен раздел [settings]; данные переносит [VaultBootstrap] (нужен Android).
      */
     fun upgraded(): StoredVault {
         if (schemaVersion >= CURRENT_SCHEMA) return this
-        return copy(policy = policy.splitLegacyPackageList(), schemaVersion = CURRENT_SCHEMA)
+        val policy = if (schemaVersion < 2) policy.splitLegacyPackageList() else policy
+        return copy(policy = policy, schemaVersion = CURRENT_SCHEMA)
     }
 
     companion object {
-        const val CURRENT_SCHEMA = 2
+        const val CURRENT_SCHEMA = 3
 
         private val json = Json {
             ignoreUnknownKeys = true

@@ -47,6 +47,7 @@ class VpnAutomationCoordinator(
     }
 
     suspend fun onBootCompleted() {
+        preferences.awaitReady()
         if (preferences.automation().autoStartAfterBoot) {
             preferences.connectionRequested = true
             maybeConnect("device boot", fromBoot = true)
@@ -66,6 +67,7 @@ class VpnAutomationCoordinator(
     fun currentWifiName(): String? = graph.wifiInfo.currentSsid()
 
     private suspend fun maybeConnect(reason: String, fromBoot: Boolean = false): Unit = connectMutex.withLock {
+        preferences.awaitReady()
         val decision = decideAutoConnect(
             AutoConnectInput(
                 settings = preferences.automation(),

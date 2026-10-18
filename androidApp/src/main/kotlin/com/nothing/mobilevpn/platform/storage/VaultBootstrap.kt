@@ -1,10 +1,24 @@
 package com.nothing.mobilecore.platform.storage
 
+import com.nothing.mobilecore.platform.AppSettings
+
 /** Данные из старого хранилища (EncryptedSharedPreferences), если оно есть. */
 internal interface LegacySource {
     /** null — старых данных нет. Исключение — данные есть, но прочитать их не удалось. */
     fun read(): StoredVault?
     fun delete()
+}
+
+/** Настройки из старого открытого SharedPreferences, если он есть. */
+internal interface LegacySettingsSource {
+    /** null — старых настроек нет. */
+    fun read(): AppSettings?
+    fun delete()
+}
+
+internal object NoLegacySettings : LegacySettingsSource {
+    override fun read(): AppSettings? = null
+    override fun delete() = Unit
 }
 
 /** Итог загрузки — для журнала событий. */
@@ -34,9 +48,32 @@ internal enum class BootstrapOutcome {
 internal class VaultBootstrap(
     private val file: VaultFile,
     private val legacy: LegacySource,
+    private val legacySettings: LegacySettingsSource = NoLegacySettings,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     fun load(): Pair<StoredVault, BootstrapOutcome> {
+        val (vault, outcome) = loadVault()
+        return importLegacySettings(vault) to outcome
+    }
+
+    /**
+     * Однократный перенос настроек из открытого SharedPreferences. Старый файл удаляется только
+     * после успешной записи; если запись не удалась — повторим при следующем запуске.
+     */
+    private fun importLegacySettings(vault: StoredVault): StoredVault {
+        if (vault.legacySettingsImported) return vault
+        val imported = runCatching { legacySettings.read() }.getOrElse { return vault }
+        val updated = vault.copy(settings = imported ?: vault.settings, legacySettingsImported = true)
+        return runCatching { persist(updated) }.fold(
+            onSuccess = {
+                if (imported != null) runCatching { legacySettings.delete() }
+                it
+            },
+            onFailure = { vault },
+        )
+    }
+
+    private fun loadVault(): Pair<StoredVault, BootstrapOutcome> {
         if (!file.exists()) return migrateOrFresh(unreadableVault = false)
         val vault = runCatching { file.read()?.let(StoredVault::decode) }.getOrNull()
             ?: run {

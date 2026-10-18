@@ -25,7 +25,6 @@ import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilecore.libbox.MobilePlatformInterface
 import com.nothing.mobilecore.libbox.toAndroidIpPrefix
 import com.nothing.mobilecore.platform.AndroidSessionConfigWriter
-import com.nothing.mobilecore.platform.AppPreferences
 import com.nothing.mobilecore.platform.ConnectionEventLog
 import com.nothing.mobilecore.platform.SafeAndroidLog
 import com.nothing.mobilecore.shared.domain.RoutingMode
@@ -109,7 +108,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
                 if (intent.getBooleanExtra(EXTRA_USER_DISCONNECT, false)) {
-                    AppPreferences(this).connectionRequested = false
+                    (application as NothingVpnApp).graph.appPreferences.connectionRequested = false
                 }
                 ConnectionEventLog.add(this, "VPN service: disconnect")
                 requestStop(error = null)

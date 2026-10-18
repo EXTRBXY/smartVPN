@@ -4,8 +4,7 @@
 
 | Хранилище | Тип | Что хранит | Класс |
 |---|---|---|---|
-| `noBackupFilesDir/vault/state.bin` | зашифрованный файл (AES-256-GCM, ключ в Android Keystore) | JSON `StoredVault`: профили **вместе с секретами**, `activeProfileId`, `TunnelPolicy`, служебные флаги миграции | `VaultFile`, `VaultStore`, `ProfileRepositoryAndroid` |
-| `nothing_vpn_user_settings` | SharedPreferences (открытые) | флаги автоматизации, `trusted_wifi`, `routing_rule_sets` (JSON), `connection_requested` | `AppPreferences` |
+| `noBackupFilesDir/vault/state.bin` | зашифрованный файл (AES-256-GCM, ключ в Android Keystore) | JSON `StoredVault`: профили **вместе с секретами**, `activeProfileId`, `TunnelPolicy`, `settings` (`AppSettings`: автоматизация, доверенные Wi-Fi, наборы приложений, `connectionRequested`), служебные флаги миграции | `VaultFile`, `VaultStore`, `ProfileRepositoryAndroid`, `AppPreferences` |
 | `nothing_vpn_diagnostics` | SharedPreferences | журнал событий (≤80 строк) | `ConnectionEventLog` |
 | `noBackupFilesDir/sing-box-session-*.json(.tmp)` | файлы | JSON-конфиг сессии с секретами (живёт секунды) | `AndroidSessionConfigWriter` |
 | `filesDir/runtime`, `cacheDir` | каталоги libbox | рабочие данные и temp ядра | `LibboxAndroidBootstrap` |
@@ -18,7 +17,8 @@
 
 - **`KeystoreVaultCipher`** — AES-256-GCM, ключ `nothing_vpn_vault_v1` в Android Keystore (не покидает Keystore), случайный IV на каждую запись. Формат файла: `[версия 1 байт][IV 12 байт][шифротекст + тег 128 бит]`. Своя реализация на `javax.crypto` вместо устаревшего `security-crypto`.
 - **`VaultFile`** — атомарная запись: шифрование → временный файл → `fsync` → `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)`. При обрыве на диске остаётся либо старая, либо новая версия целиком. Нерасшифровываемый файл не удаляется, а переименовывается в `state.bin.corrupt-<время>`.
-- **`StoredVault`** — содержимое (`schemaVersion = 2`). Новое поле — только со значением по умолчанию; смена смысла — поднять версию и описать миграцию в `StoredVault.upgraded()` (применяется в `VaultBootstrap` при загрузке и записывается обратно). v1 → v2: общий список приложений разделён на «через VPN» (`includedPackageNames`, ключ `allowedPackageNames`) и «в обход» (`excludedPackageNames`); в режиме «в обход» старый список переносится в исключения.
+- **`StoredVault`** — содержимое (`schemaVersion = 3`). Новое поле — только со значением по умолчанию; смена смысла — поднять версию и описать миграцию в `StoredVault.upgraded()` (применяется в `VaultBootstrap` при загрузке и записывается обратно). v1 → v2: общий список приложений разделён на «через VPN» (`includedPackageNames`, ключ `allowedPackageNames`) и «в обход» (`excludedPackageNames`); в режиме «в обход» старый список переносится в исключения. v2 → v3: добавлен раздел `settings`; `VaultBootstrap` один раз переносит туда открытый SharedPreferences `nothing_vpn_user_settings` (`AndroidLegacySettingsSource`, флаг `legacySettingsImported`) и удаляет его только после успешной записи.
+- **`AppPreferences`** — чтение синхронное из состояния `VaultStore`, запись — через очередь с одним обработчиком (порядок сохраняется, записи до загрузки ждут её). Ошибка записи уходит в журнал событий. Автоматизация перед решениями ждёт `awaitReady()`.
 - **`VaultStore`** — состояние в памяти (`StateFlow`) + запись. Чтения ничего не пишут. Изменение (`update`) под мьютексом сначала записывается на диск и только потом становится видимым; ошибка записи пробрасывается вызывающему. Все чтения ждут `awaitReady()` — завершения загрузки при старте процесса.
 - **`ProfileRepositoryAndroid`** — `ProfileRepositoryPort` поверх `VaultStore`; `observeProfiles` — поток из состояния в памяти.
 
@@ -53,4 +53,4 @@
 
 ## Политика туннеля
 
-Один `TunnelPolicy` на приложение (не на профиль), часть `StoredVault`. При отсутствии — `TunnelPolicy()` по умолчанию. Наборы маршрутизации (`RoutingRuleSet`) хранятся отдельно в `AppPreferences` и не являются частью политики.
+Один `TunnelPolicy` на приложение (не на профиль), часть `StoredVault`. При отсутствии — `TunnelPolicy()` по умолчанию. Наборы маршрутизации (`RoutingRuleSet`) хранятся в `StoredVault.settings` (через `AppPreferences`) и не являются частью политики.

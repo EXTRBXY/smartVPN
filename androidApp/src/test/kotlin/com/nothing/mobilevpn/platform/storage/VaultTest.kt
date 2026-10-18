@@ -1,10 +1,21 @@
 package com.nothing.mobilecore.platform.storage
 
+import com.nothing.mobilecore.platform.AppPreferences
+import com.nothing.mobilecore.platform.AppSettings
+import com.nothing.mobilecore.platform.AutomationSettings
 import com.nothing.mobilecore.platform.ProfileRepositoryAndroid
+import com.nothing.mobilecore.platform.RoutingRuleSet
+import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VlessSecurity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -33,6 +44,18 @@ private class FakeLegacy(var data: StoredVault?) : LegacySource {
     var deleted = false
     override fun read(): StoredVault? {
         if (unreadable) throw IllegalStateException("keystore")
+        return if (deleted) null else data
+    }
+    override fun delete() {
+        deleted = true
+    }
+}
+
+private class FakeLegacySettings(var data: AppSettings?) : LegacySettingsSource {
+    var deleted = false
+    var reads = 0
+    override fun read(): AppSettings? {
+        reads++
         return if (deleted) null else data
     }
     override fun delete() {
@@ -91,7 +114,7 @@ class VaultTest {
     fun bootstrap_freshInstall() {
         val (vault, outcome) = VaultBootstrap(vaultFile(), FakeLegacy(null)).load()
         assertEquals(BootstrapOutcome.FRESH, outcome)
-        assertEquals(StoredVault(), vault)
+        assertEquals(StoredVault(legacySettingsImported = true), vault)
     }
 
     @Test
@@ -246,5 +269,63 @@ class VaultTest {
         assertEquals(listOf("a.b", "c.d"), vault.policy.excludedPackageNames)
         // Новая схема записана на диск.
         assertEquals(vault, StoredVault.decode(vaultFile().read()!!))
+    }
+
+    private val legacySettings = AppSettings(
+        automation = AutomationSettings(autoReconnect = true, trustedWifiNames = setOf("home")),
+        routingRuleSets = listOf(RoutingRuleSet("work", RoutingMode.PER_APP_ALLOWED, listOf("a.b"))),
+        connectionRequested = true,
+    )
+
+    @Test
+    fun bootstrap_importsLegacySettingsOnceAndDeletesOldFile() {
+        val source = FakeLegacySettings(legacySettings)
+
+        val (vault, _) = VaultBootstrap(vaultFile(), FakeLegacy(null), source).load()
+
+        assertEquals(legacySettings, vault.settings)
+        assertTrue(vault.legacySettingsImported)
+        assertTrue(source.deleted)
+        assertEquals(vault, StoredVault.decode(vaultFile().read()!!))
+
+        // Повторная загрузка не читает старый источник и не затирает новые значения.
+        val (second, _) = VaultBootstrap(vaultFile(), FakeLegacy(null), source).load()
+        assertEquals(1, source.reads)
+        assertEquals(legacySettings, second.settings)
+    }
+
+    @Test
+    fun bootstrap_keepsLegacySettingsWhenWriteFails() {
+        val source = FakeLegacySettings(legacySettings)
+        cipher.failEncrypt = true
+
+        val (vault, _) = VaultBootstrap(vaultFile(), FakeLegacy(null), source).load()
+
+        assertFalse(vault.legacySettingsImported)
+        assertFalse(source.deleted)
+    }
+
+    @Test
+    fun preferences_writesAreAppliedInOrderAndPersisted() = runBlocking {
+        val store = VaultStore(vaultFile())
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val preferences = AppPreferences(store, scope)
+            // Записи до загрузки хранилища ждут её и не теряются.
+            preferences.setAutoStart(true)
+            preferences.saveRoutingRuleSet(RoutingRuleSet("one", RoutingMode.PER_APP_ALLOWED, listOf("a")))
+            preferences.saveRoutingRuleSet(RoutingRuleSet("two", RoutingMode.PER_APP_EXCLUDED, listOf("b")))
+            preferences.deleteRoutingRuleSet("one")
+            preferences.connectionRequested = true
+            store.initialize(StoredVault())
+
+            val settings = withTimeout(5_000) { preferences.settings.first { it.connectionRequested } }
+
+            assertTrue(settings.automation.autoStartAfterBoot)
+            assertEquals(listOf("two"), settings.routingRuleSets.map { it.name })
+            assertEquals(settings, StoredVault.decode(vaultFile().read()!!).settings)
+        } finally {
+            scope.cancel()
+        }
     }
 }

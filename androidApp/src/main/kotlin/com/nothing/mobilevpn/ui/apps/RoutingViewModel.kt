@@ -72,6 +72,9 @@ internal class RoutingViewModel(
             mutableState.update { it.copy(loaded = true, draft = saved, saved = saved) }
         }
         viewModelScope.launch { installedApps.refresh() }
+        viewModelScope.launch {
+            preferences.settings.collect { settings -> mutableState.update { it.copy(ruleSets = settings.routingRuleSets) } }
+        }
     }
 
     fun setMode(mode: RoutingMode) = updateDraft { it.copy(mode = mode) }
@@ -92,12 +95,10 @@ internal class RoutingViewModel(
         val draft = mutableState.value.draft
         if (name.isBlank() || draft.mode == RoutingMode.FULL_TUN) return
         preferences.saveRoutingRuleSet(RoutingRuleSet(name.trim(), draft.mode, draft.current.sorted()))
-        mutableState.update { it.copy(ruleSets = preferences.routingRuleSets()) }
     }
 
     fun deleteRuleSet(name: String) {
         preferences.deleteRoutingRuleSet(name)
-        mutableState.update { it.copy(ruleSets = preferences.routingRuleSets()) }
     }
 
     fun save(onResult: (Result<Unit>) -> Unit) {
