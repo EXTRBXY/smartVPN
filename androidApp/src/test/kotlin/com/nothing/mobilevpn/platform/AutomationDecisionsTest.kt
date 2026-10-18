@@ -18,7 +18,7 @@ class AutomationDecisionsTest {
     private val idle = AutoConnectInput(
         settings = off,
         connectionRequested = false,
-        fromBoot = false,
+        trigger = AutoConnectTrigger.AUTOMATIC,
         wifiSsid = null,
         tunnel = TunnelStatus.Stopped(),
         session = VpnSessionState.Disconnected,
@@ -42,7 +42,7 @@ class AutomationDecisionsTest {
 
     @Test
     fun boot_connectsWhenRequestedEvenWithoutAutoReconnect() {
-        assertTrue(decideAutoConnect(idle.copy(fromBoot = true, connectionRequested = true)).connect)
+        assertTrue(decideAutoConnect(idle.copy(trigger = AutoConnectTrigger.BOOT, connectionRequested = true)).connect)
     }
 
     @Test
@@ -91,5 +91,48 @@ class AutomationDecisionsTest {
         assertTrue(shouldRestartAfterHealthFailures(2, on, connectionRequested = true))
         assertFalse(shouldRestartAfterHealthFailures(2, off, connectionRequested = true))
         assertFalse(shouldRestartAfterHealthFailures(2, on, connectionRequested = false))
+    }
+
+    @Test
+    fun processRestart_restoresRequestedTunnelWithoutAutoReconnect() {
+        val restart = idle.copy(trigger = AutoConnectTrigger.PROCESS_RESTART)
+        assertEquals(SkipReason.NOT_REQUESTED, decideAutoConnect(restart).skip)
+
+        val decision = decideAutoConnect(restart.copy(connectionRequested = true))
+        assertTrue(decision.connect)
+        assertFalse(decision.markRequested)
+    }
+
+    @Test
+    fun processRestart_ignoresTrustedWifi() {
+        // Туннель работал до смерти процесса — возвращаем его и в доверенной сети.
+        val settings = off.copy(connectOnUntrustedWifi = true, trustedWifiNames = setOf("Home"))
+        val decision = decideAutoConnect(
+            idle.copy(settings = settings, trigger = AutoConnectTrigger.PROCESS_RESTART, connectionRequested = true, wifiSsid = "Home"),
+        )
+        assertTrue(decision.connect)
+    }
+
+    @Test
+    fun alwaysOn_connectsAndMarksRequestedEvenIfUserDisconnectedBefore() {
+        val settings = off.copy(connectOnUntrustedWifi = true, trustedWifiNames = setOf("Home"))
+        val decision = decideAutoConnect(
+            idle.copy(settings = settings, trigger = AutoConnectTrigger.ALWAYS_ON, connectionRequested = false, wifiSsid = "Home"),
+        )
+        assertTrue(decision.connect)
+        assertTrue(decision.markRequested)
+    }
+
+    @Test
+    fun alwaysOn_skipsWhenAlreadyActiveOrNoPermission() {
+        val alwaysOn = idle.copy(trigger = AutoConnectTrigger.ALWAYS_ON)
+        assertEquals(SkipReason.ALREADY_ACTIVE, decideAutoConnect(alwaysOn.copy(tunnel = TunnelStatus.Running(1, 0))).skip)
+        assertEquals(SkipReason.ALREADY_ACTIVE, decideAutoConnect(alwaysOn.copy(session = VpnSessionState.Connecting)).skip)
+        assertEquals(SkipReason.VPN_PERMISSION_REQUIRED, decideAutoConnect(alwaysOn.copy(vpnPermissionNeeded = true)).skip)
+    }
+
+    @Test
+    fun automaticTrigger_stillNeedsAutoReconnect() {
+        assertEquals(SkipReason.NOT_REQUESTED, decideAutoConnect(idle.copy(connectionRequested = true)).skip)
     }
 }

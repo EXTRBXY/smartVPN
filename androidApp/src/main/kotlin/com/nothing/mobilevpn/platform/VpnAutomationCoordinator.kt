@@ -50,8 +50,23 @@ class VpnAutomationCoordinator(
         preferences.awaitReady()
         if (preferences.automation().autoStartAfterBoot) {
             preferences.connectionRequested = true
-            maybeConnect("device boot", fromBoot = true)
+            maybeConnect("device boot", AutoConnectTrigger.BOOT)
         }
+    }
+
+    /**
+     * Система запустила сервис сама: после смерти процесса (`intent == null`) или как Always-on.
+     * Конфиг собирается заново из хранилища через `VpnSessionController` — так же, как при
+     * обычном подключении. Возвращает true, если туннель поднят (иначе сервис может остановиться).
+     */
+    internal suspend fun restoreTunnel(trigger: AutoConnectTrigger): Boolean {
+        val reason = when (trigger) {
+            AutoConnectTrigger.ALWAYS_ON -> "always-on"
+            AutoConnectTrigger.PROCESS_RESTART -> "process restart"
+            AutoConnectTrigger.BOOT -> "device boot"
+            AutoConnectTrigger.AUTOMATIC -> "service start"
+        }
+        return maybeConnect(reason, trigger)
     }
 
     fun requestConnect(source: String) {
@@ -66,13 +81,17 @@ class VpnAutomationCoordinator(
 
     fun currentWifiName(): String? = graph.wifiInfo.currentSsid()
 
-    private suspend fun maybeConnect(reason: String, fromBoot: Boolean = false): Unit = connectMutex.withLock {
+    /** true — туннель поднят этим вызовом или уже работал; false — пропуск или ошибка. */
+    private suspend fun maybeConnect(
+        reason: String,
+        trigger: AutoConnectTrigger = AutoConnectTrigger.AUTOMATIC,
+    ): Boolean = connectMutex.withLock {
         preferences.awaitReady()
         val decision = decideAutoConnect(
             AutoConnectInput(
                 settings = preferences.automation(),
                 connectionRequested = preferences.connectionRequested,
-                fromBoot = fromBoot,
+                trigger = trigger,
                 wifiSsid = currentWifiName(),
                 tunnel = graph.tunnelStatus.status.value,
                 session = graph.sessionController.state.value,
@@ -82,17 +101,22 @@ class VpnAutomationCoordinator(
         if (decision.markRequested) preferences.connectionRequested = true
         when (decision.skip) {
             null -> Unit
+            SkipReason.ALREADY_ACTIVE -> return true
             SkipReason.VPN_PERMISSION_REQUIRED -> {
                 ConnectionEventLog.add(app, "Automatic connection skipped: VPN permission required")
-                return
+                return false
             }
-            else -> return
+            else -> {
+                if (trigger != AutoConnectTrigger.AUTOMATIC) {
+                    ConnectionEventLog.add(app, "Automatic connection skipped ($reason): ${decision.skip.name.lowercase()}")
+                }
+                return false
+            }
         }
         ConnectionEventLog.add(app, "Automatic connection: $reason")
-        graph.sessionController.connectSuspend().onFailure {
-            ConnectionEventLog.add(app, "Automatic connection failed: ${it.toVpnError().code}")
-        }
-        Unit
+        graph.sessionController.connectSuspend()
+            .onFailure { ConnectionEventLog.add(app, "Automatic connection failed: ${it.toVpnError().code}") }
+            .isSuccess
     }
 
     private fun startHealthMonitor() {

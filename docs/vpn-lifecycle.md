@@ -82,12 +82,14 @@ UI: vm.connect()                       (connectionRequested = true)
 
 | Триггер | Условие подключения |
 |---|---|
-| Загрузка / обновление пакета (`BootCompletedReceiver`) | `autoStartAfterBoot` → `connectionRequested=true` → `maybeConnect(fromBoot)` |
+| Загрузка / обновление пакета (`BootCompletedReceiver`) | `autoStartAfterBoot` → `connectionRequested=true` → `maybeConnect(BOOT)` |
+| Сервис воссоздан после смерти процесса (`onStartCommand`, `intent == null`) | `connectionRequested` (без `autoReconnect`), доверенный Wi-Fi не мешает |
+| Always-on VPN (`onStartCommand`, action `android.net.VpnService`) | всегда; ставит `connectionRequested=true`, доверенный Wi-Fi не мешает |
 | Появление сети (`NetworkCallback.onAvailable`, задержка 700 мс) | `autoReconnect && connectionRequested`, либо «недоверенный Wi-Fi» |
 | Недоверенный Wi-Fi | `connectOnUntrustedWifi`, текущий SSID известен (нужен `ACCESS_FINE_LOCATION`) и не в `trustedWifiNames`; для доверенного SSID — не подключаться |
 | Health-монитор (раз в 60 с) | `periodicHealthCheck` и VPN запущен: `smokeCheck`; после 2 подряд сбоев при `autoReconnect && connectionRequested` → `disconnectSuspend` → пауза 1 с → `maybeConnect` |
 
-`maybeConnect` под своим `Mutex` собирает входные данные и зовёт чистую функцию `decideAutoConnect` (`platform/AutomationDecisions.kt`, покрыта `AutomationDecisionsTest`): пропуск, если доверенный Wi-Fi, подключение не запрошено, туннель `Running`/`Starting` или контроллер занят, нет разрешения VPN; флаг «VPN нужен» для недоверенного Wi-Fi ставится и при пропуске. Порог перезапуска по health-check — `shouldRestartAfterHealthFailures`. Решения и ошибки (кодом `VpnError`) пишутся в `ConnectionEventLog`.
+`maybeConnect(reason, trigger)` под своим `Mutex` собирает входные данные и зовёт чистую функцию `decideAutoConnect` (`platform/AutomationDecisions.kt`, покрыта `AutomationDecisionsTest`; повод — `AutoConnectTrigger`: `AUTOMATIC`, `BOOT`, `PROCESS_RESTART`, `ALWAYS_ON`): пропуск, если доверенный Wi-Fi, подключение не запрошено, туннель `Running`/`Starting` или контроллер занят, нет разрешения VPN; флаг «VPN нужен» для недоверенного Wi-Fi ставится и при пропуске. Порог перезапуска по health-check — `shouldRestartAfterHealthFailures`. Решения и ошибки (кодом `VpnError`) пишутся в `ConnectionEventLog`.
 
 ## Что значит «Kill Switch»
 
@@ -95,4 +97,9 @@ UI: vm.connect()                       (connectionRequested = true)
 
 ## Известные особенности
 - `VpnBoxHandler.serviceReload()` перезапускает ядро конфигом сессии, который хранится только в памяти сервиса (`sessionConfig`, очищается в teardown): файл с секретами удалён до старта ядра. Ошибка reload останавливает сервис с причиной.
-- Сервис возвращает `START_STICKY` для CONNECT. При воссоздании системой (`intent == null`) конфига с секретами уже нет, поэтому сервис сразу останавливается; восстановление делает автоматизация (стартует в `NothingVpnApp.onCreate`), если `autoReconnect` и `connectionRequested`.
+- Сервис возвращает `START_STICKY` для CONNECT. Старт не от приложения разбирает чистая `classifyServiceStart` (`vpn/ServiceStartDecisions.kt`, `ServiceStartDecisionsTest`):
+  - `intent == null` — система воссоздала сервис после смерти процесса (`PROCESS_RESTART`);
+  - action `VpnService.SERVICE_INTERFACE` — запуск как Always-on VPN (загрузка, обновление пакета, включение в настройках) (`ALWAYS_ON`).
+
+  В обоих случаях конфига с секретами уже нет (он удаляется до старта ядра, в `Intent` секретов нет), поэтому сервис зовёт `VpnAutomationCoordinator.restoreTunnel(trigger)` в `applicationScope`: тот через `decideAutoConnect` решает, нужно ли подключение, и вызывает обычный `VpnSessionController.connectSuspend()` — конфиг заново собирается из зашифрованного хранилища, сервису приходит штатный `ACTION_CONNECT`. Если подключение пропущено или не удалось, сервис останавливается (`stopSelfIfIdle`). Запуск foreground-сервиса из фона здесь разрешён, потому что у приложения выдано разрешение VPN (`OP_ACTIVATE_VPN`).
+- Диагностика 2026-10-18 (realme, Android 16): «VPN service: restarted without command» после «tunnel ready» были не убийствами из-за батареи — `exit-info` показывал `PACKAGE UPDATED` (переустановка), а следом система стартовала сервис как Always-on (`callingPackage = android`), который раньше игнорировался. Причину смерти процесса смотреть в `adb shell dumpsys activity exit-info com.nothing.mobilecore`.

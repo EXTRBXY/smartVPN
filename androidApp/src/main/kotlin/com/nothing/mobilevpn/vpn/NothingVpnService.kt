@@ -25,6 +25,7 @@ import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilecore.libbox.MobilePlatformInterface
 import com.nothing.mobilecore.libbox.toAndroidIpPrefix
 import com.nothing.mobilecore.platform.AndroidSessionConfigWriter
+import com.nothing.mobilecore.platform.AutoConnectTrigger
 import com.nothing.mobilecore.platform.ConnectionEventLog
 import com.nothing.mobilecore.platform.SafeAndroidLog
 import com.nothing.mobilecore.shared.domain.RoutingMode
@@ -105,20 +106,20 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_DISCONNECT -> {
-                if (intent.getBooleanExtra(EXTRA_USER_DISCONNECT, false)) {
+        when (val start = classifyServiceStart(intent?.action)) {
+            ServiceStart.Disconnect -> {
+                if (intent?.getBooleanExtra(EXTRA_USER_DISCONNECT, false) == true) {
                     (application as NothingVpnApp).graph.appPreferences.connectionRequested = false
                 }
                 ConnectionEventLog.add(this, "VPN service: disconnect")
                 requestStop(error = null)
                 return START_NOT_STICKY
             }
-            ACTION_CONNECT -> {
+            ServiceStart.Connect -> {
                 ConnectionEventLog.add(this, "VPN service: connection started")
-                val sessionId = intent.getLongExtra(EXTRA_SESSION_ID, -1L)
-                val configPath = intent.getStringExtra(EXTRA_CONFIG_PATH)
-                val policyJson = intent.getStringExtra(EXTRA_POLICY_JSON)
+                val sessionId = intent?.getLongExtra(EXTRA_SESSION_ID, -1L) ?: -1L
+                val configPath = intent?.getStringExtra(EXTRA_CONFIG_PATH)
+                val policyJson = intent?.getStringExtra(EXTRA_POLICY_JSON)
                 if (sessionId < 0 || configPath == null || policyJson == null) {
                     stopSelfIfIdle(startId)
                     return START_NOT_STICKY
@@ -149,13 +150,33 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
                 }
                 return START_STICKY
             }
+            is ServiceStart.Restore -> {
+                // Система запустила сервис сама: воссоздала START_STICKY-сервис после смерти
+                // процесса или стартует Always-on VPN. Конфига с секретами уже нет (он удаляется
+                // до старта ядра), поэтому туннель собирается заново из хранилища через
+                // VpnSessionController — он пришлёт сюда обычный ACTION_CONNECT.
+                ConnectionEventLog.add(
+                    this,
+                    if (start.trigger == AutoConnectTrigger.ALWAYS_ON) {
+                        "VPN service: always-on start"
+                    } else {
+                        "VPN service: restarted without command"
+                    },
+                )
+                val app = application as NothingVpnApp
+                app.applicationScope.launch {
+                    val restored = app.automation.restoreTunnel(start.trigger)
+                    if (!restored) {
+                        withContext(Dispatchers.Main) { stopSelfIfIdle(startId) }
+                    }
+                }
+                return START_NOT_STICKY
+            }
+            ServiceStart.Ignore -> {
+                stopSelfIfIdle(startId)
+                return START_NOT_STICKY
+            }
         }
-        // null-intent: система перезапустила START_STICKY-сервис после смерти процесса. Конфиг с
-        // секретами к этому моменту удалён, поднять туннель здесь нельзя — переподключение делает
-        // VpnAutomationCoordinator (запускается в NothingVpnApp.onCreate), если оно запрошено.
-        ConnectionEventLog.add(this, "VPN service: restarted without command")
-        stopSelfIfIdle(startId)
-        return START_NOT_STICKY
     }
 
     override fun onRevoke() {
