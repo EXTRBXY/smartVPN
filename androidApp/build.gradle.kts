@@ -12,9 +12,9 @@ val libboxAar: File = file("libs/libbox.aar")
 tasks.register("checkLibboxAar") {
     doLast {
         require(libboxAar.isFile) {
-            "РќРµС‚ ${libboxAar.invariantSeparatorsPath}. РЎРѕР±РµСЂРёС‚Рµ AAR: sing-box cmd/internal/build_libbox -target android " +
-                "(РІСЃРµ ABI) РёР»Рё scripts/build-libbox-aar.ps1 РїСЂРё РєР»РѕРЅРµ sing-box РІ <СЂРѕРґРёС‚РµР»СЊ mobileVPN>/_deps/sing-box; " +
-                "СЃРј. experimental/libbox/ffi.json в†’ DEPLOY_ANDROID."
+            "Нет ${libboxAar.invariantSeparatorsPath}. Соберите AAR: sing-box cmd/internal/build_libbox -target android " +
+                "(все ABI) или scripts/build-libbox-aar.ps1 при клоне sing-box в <родитель mobileVPN>/_deps/sing-box; " +
+                "см. experimental/libbox/ffi.json → DEPLOY_ANDROID."
         }
     }
 }
@@ -128,10 +128,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 
-/** Release APK: isDebuggable=false, R8, Р±РµР· debugImplementation-Р°СЂС‚РµС„Р°РєС‚РѕРІ; РїРѕРґРїРёСЃСЊ debug-keystore РґР»СЏ Р»РѕРєР°Р»СЊРЅРѕР№ СѓСЃС‚Р°РЅРѕРІРєРё. */
+/** Release APK: isDebuggable=false, R8, без debugImplementation-артефактов; подпись debug-keystore для локальной установки. */
 tasks.register("nonDebugApk") {
     group = "build"
     description =
-        "РЎРѕР±РёСЂР°РµС‚ localRelease APK Р±РµР· СЂРµР¶РёРјР° РѕС‚Р»Р°РґРєРё (Р»РѕРєР°Р»СЊРЅР°СЏ СѓСЃС‚Р°РЅРѕРІРєР°, debug key). Р’С‹С…РѕРґ: build/outputs/apk/localRelease/"
+        "Собирает localRelease APK без режима отладки (локальная установка, debug key). Выход: build/outputs/apk/localRelease/"
     dependsOn("assembleLocalRelease")
 }
