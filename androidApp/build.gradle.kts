@@ -33,9 +33,16 @@ android {
         applicationId = providers.gradleProperty("app.applicationId").get()
         minSdk = providers.gradleProperty("android.minSdk").get().toInt()
         targetSdk = providers.gradleProperty("android.targetSdk").get().toInt()
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Русский — основной (values/), английский — values-en. Язык выбирается в системных
+    // настройках приложения (Android 13+); locale_config генерируется из ресурсов.
+    androidResources {
+        generateLocaleConfig = true
+        localeFilters += listOf("ru", "en")
     }
 
     signingConfigs {

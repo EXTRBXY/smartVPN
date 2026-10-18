@@ -13,7 +13,7 @@
 | `BootCompletedReceiver` | `exported=true`, `BOOT_COMPLETED` и `MY_PACKAGE_REPLACED` |
 | `VpnQuickTileService` | `exported=true`, `BIND_QUICK_SETTINGS_TILE`, `QS_TILE` |
 
-Строки (русские) — `res/values/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Все тексты интерфейса — в `strings.xml` (в коде `stringResource` в composable и `context.getString` в колбэках); захардкоженных русских строк в Kotlin нет. Английской локали пока нет.
+Строки: русские (основные) — `res/values/strings.xml`, английские — `res/values-en/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Все тексты интерфейса — в `strings.xml` (в коде `stringResource` в composable и `context.getString` в колбэках); захардкоженных русских строк в Kotlin нет. Набор ключей в обоих файлах одинаковый; новая строка добавляется в оба. Язык приложения выбирается в системных настройках (Android 13+): `generateLocaleConfig` + `res/resources.properties` (`unqualifiedResLocale=ru`).
 
 ## Пакет `vpn/` — системный VPN
 

@@ -44,7 +44,7 @@ Windows / PowerShell, JDK 17, из корня:
 - В `shared` нельзя тянуть Android SDK типы. Платформа подключается через порты (`SystemVpnPort`, `ProfileRepositoryPort`, `SessionConfigWriter`, `SingBoxCoreInfoPort`, `ConnectivityProbePort`).
 - Важные сетевые параметры (DNS/route/TUN) задаются явно в policy, а не «магией» в UI. Отклонение от документации sing-box — только с обоснованием и описанием риска.
 - Сохранение настроек всегда проходит `TunnelPolicy.validate()` и возвращает явную ошибку пользователю.
-- UI минималистичный, короткие однотипные подписи. Тексты — только в `res/values/strings.xml` (`stringResource` в composable, `context.getString` в колбэках); русских литералов в Kotlin-коде UI быть не должно.
+- UI минималистичный, короткие однотипные подписи. Тексты — только в `res/values/strings.xml` + перевод в `res/values-en/strings.xml` (`stringResource` в composable, `context.getString` в колбэках); русских литералов в Kotlin-коде UI быть не должно.
 
 ## Инварианты безопасности (проверяй при любых правках затрагиваемых мест)
 

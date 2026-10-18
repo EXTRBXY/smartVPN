@@ -71,8 +71,8 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 Добавлены: `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`, `ProfileServiceTest`, `StorageCompatibilityTest`, `VpnErrorTest`. Остаток ниже. Исходное описание:
 Отсутствуют тесты: `NothingVpnService`, libbox-мост, `VpnAutomationCoordinator`, большинства ViewModel (есть `DnsViewModelTest`), UI (Compose), миграция. Единственный интеграционный набор — инструментальный и запускается на эмуляторе в CI. Начать с выноса логики решений (`maybeConnect`, `ProfileSecretIntegrity`-подобные) в чистые функции.
 
-### 16. ~~Локализация~~ — сделано (кроме английской локали)
-Все 162 строки UI вынесены в `strings.xml`. Исходное описание:
+### 16. ~~Локализация~~ — сделано
+Все строки UI вынесены в `strings.xml`, есть английская локаль (`values-en`). Исходное описание:
 Русские строки смешаны: часть в `strings.xml`, большая часть захардкожена в `MainActivity`, `UserErrorText`, `VpnQuickTileService` (напр., «Отключение…», « · N мин»). Нет английской локали. Вынести всё в ресурсы.
 
 ## P3
