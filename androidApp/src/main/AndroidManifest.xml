@@ -64,6 +64,12 @@
             </intent-filter>
         </service>
 
+        <!-- Сторож туннеля: поднимает VPN, если процесс погиб, а система не перезапустила сервис. -->
+        <service
+            android:name=".platform.TunnelWatchdogJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <receiver
             android:name=".platform.BootCompletedReceiver"
             android:directBootAware="false"

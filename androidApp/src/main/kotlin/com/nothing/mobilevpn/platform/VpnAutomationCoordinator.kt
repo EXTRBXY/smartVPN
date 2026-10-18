@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +46,20 @@ class VpnAutomationCoordinator(
             )
         }.onFailure { ConnectionEventLog.add(app, "Network monitor unavailable: ${it.javaClass.simpleName}") }
         startHealthMonitor()
+        startWatchdogSync()
+    }
+
+    /**
+     * Держит [TunnelWatchdog] в соответствии с состоянием. Ждёт хранилище: до загрузки
+     * `connectionRequested` читался бы как false и снимал сторожа в только что поднятом процессе.
+     */
+    private fun startWatchdogSync() {
+        scope.launch {
+            preferences.awaitReady()
+            combine(preferences.connectionRequestedFlow, graph.tunnelStatus.status, ::decideWatchdogSchedule)
+                .distinctUntilChanged()
+                .collect { TunnelWatchdog.apply(app, it) }
+        }
     }
 
     suspend fun onBootCompleted() {

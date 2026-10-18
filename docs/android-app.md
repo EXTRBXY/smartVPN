@@ -11,6 +11,7 @@
 | `MainActivity` | launcher + `QS_TILE_PREFERENCES` (долгое нажатие на плитку открывает приложение), `adjustResize` |
 | `NothingVpnService` | `exported=false`, `BIND_VPN_SERVICE`, `foregroundServiceType=connectedDevice`, action `android.net.VpnService` |
 | `BootCompletedReceiver` | `exported=true`, `BOOT_COMPLETED` и `MY_PACKAGE_REPLACED` |
+| `TunnelWatchdogJobService` | `exported=false`, `BIND_JOB_SERVICE` (сторож туннеля, см. [vpn-lifecycle.md](vpn-lifecycle.md)) |
 | `VpnQuickTileService` | `exported=true`, `BIND_QUICK_SETTINGS_TILE`, `QS_TILE` |
 
 Строки: русские (основные) — `res/values/strings.xml`, английские — `res/values-en/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Все тексты интерфейса — в `strings.xml` (в коде `stringResource` в composable и `context.getString` в колбэках); захардкоженных русских строк в Kotlin нет. Набор ключей в обоих файлах одинаковый; новая строка добавляется в оба. Язык приложения выбирается в системных настройках (Android 13+): `generateLocaleConfig` + `res/resources.properties` (`unqualifiedResLocale=ru`).
@@ -59,6 +60,7 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 | `AppPreferences` | Раздел `settings` зашифрованного `StoredVault`: флаги автоматизации, доверенные Wi-Fi, наборы маршрутизации (`RoutingRuleSet`), `connectionRequested`; запись через фоновую очередь |
 | `VpnAutomationCoordinator` | Автоподключение и health-монитор (см. [vpn-lifecycle.md](vpn-lifecycle.md)) |
 | `BootCompletedReceiver` | → `automation.onBootCompleted()` через `goAsync()` |
+| `TunnelWatchdog` + `TunnelWatchdogJobService` | Periodic persisted job (15 мин), пока туннель `Running` и `connectionRequested`; в новом процессе → `automation.restoreTunnel(PROCESS_RESTART)`. Решения — `TunnelWatchdogDecisions.kt` |
 | `AndroidSessionConfigWriter` + `SessionConfigFileLifecycle` | Запись `sing-box-session-<ts>.json` (через `.tmp` + rename) в `noBackupFilesDir`; политика очистки: ≤2 файла, возраст ≤5 мин (6 ч для явной очистки), `keepPath` неприкосновенен |
 | `AndroidSingBoxCoreInfo` | `Libbox.version()` |
 | `ConnectionEventLog` | Кольцевой журнал событий (80 записей, 240 символов, редакция) в SharedPreferences `nothing_vpn_diagnostics` |
@@ -103,7 +105,7 @@ ViewModel не делают сетевых запросов и не трогаю
 `UserErrorText` — исчерпывающий перевод `VpnError` в строки `strings.xml` (см. [glossary.md](glossary.md)); классификация исключений — в `shared` (`toVpnError`).
 
 ## Тесты androidApp
-- `src/test` (JVM): `storage/VaultTest`, `storage/ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest`, `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`.
+- `src/test` (JVM): `storage/VaultTest`, `storage/ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest`, `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`, `TunnelWatchdogDecisionsTest`.
 - `src/androidTest`: `VpnLifecycleInstrumentationTest` (начальный статус туннеля, удаление старого running-флага, константы action, `stopVpnAndAwait` в остановленном состоянии, замена секрета при upsert).
 
 ## Сборка/ProGuard
