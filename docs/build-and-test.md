@@ -39,24 +39,24 @@ AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compile
 
 ## CI (`.github/workflows/ci.yml`)
 Триггеры: PR, push в `main`/`master`.
-- Job `build` (ubuntu, JDK 17 temurin): `:shared:check` → `:androidApp:assembleDebug` → `:androidApp:testDebugUnitTest`.
+- Job `build` (ubuntu, JDK 17 temurin): `:shared:check` → `:androidApp:assembleDebug` → `:androidApp:testDebugUnitTest` → `:androidApp:lintDebug` (HTML-отчёт выкладывается артефактом).
 - Job `instrumented-tests`: эмулятор API 34 x86_64 (pixel_6), `:androidApp:connectedDebugAndroidTest`.
-- Замечание: README рекомендует локально `:shared:testAndroidHostTest`, CI — `:shared:check`; lint в CI не запускается.
+- Замечание: README рекомендует локально `:shared:testAndroidHostTest`, CI — `:shared:check` (включает его). Сборке нужна платформа SDK 37; на раннере её доставляет AGP/SDK-менеджер — если CI упадёт на отсутствии `android-37.0`, добавить шаг установки платформы.
 
 ## Тесты
 
 | Набор | Расположение | Кол-во/что |
 |---|---|---|
 | shared (commonTest) | `shared/src/commonTest` | контроллер сессии (10 сценариев), компилятор, валидация policy, парсер/форматтер, редакция |
-| androidApp unit | `androidApp/src/test` | целостность секретов, жизненный цикл session-файлов |
-| androidApp instrumented | `androidApp/src/androidTest` | жизненный цикл VPN-флага, константы контрактов, замена секрета |
+| androidApp unit | `androidApp/src/test` | хранилище и миграции (`VaultTest`), целостность секретов, session-файлы, плитка, DNS и маршрутизация (ViewModel/черновик), решения автоматизации, перезапуска сервиса и сторожа |
+| androidApp instrumented | `androidApp/src/androidTest` | начальный статус туннеля, константы контрактов, замена секрета |
 
-Не покрыто тестами: `NothingVpnService`, `libbox/*`, UI, платформенная часть `VpnAutomationCoordinator` (решения покрыты `AutomationDecisionsTest`), ViewModel экранов (кроме `DnsViewModelTest`), `KeystoreVaultCipher` и `AndroidLegacySource` (требуют устройства; логика хранилища и миграции покрыта `VaultTest` с фейками).
+Не покрыто тестами: `NothingVpnService`, `libbox/*`, UI, платформенная часть `VpnAutomationCoordinator` (решения покрыты `AutomationDecisionsTest`), ViewModel экранов (кроме `DnsViewModelTest` и черновика маршрутизации `RoutingDraftTest`), `KeystoreVaultCipher` и `AndroidLegacySource` (требуют устройства; логика хранилища и миграции покрыта `VaultTest` с фейками).
 
 ## Ручная проверка перед релизом
 Чек-лист тестовой эксплуатации и как сообщать о проблемах — [testing-checklist.md](testing-checklist.md).
 
-Подключение и отключение; смена Wi-Fi ↔ мобильная сеть; отключение из уведомления и плитки; QR-импорт; per-app режимы; DNS-исключения; поведение системной блокировки без VPN; автозапуск после перезагрузки (если включён); отозвать VPN из системных настроек.
+Подключение и отключение; смена Wi-Fi ↔ мобильная сеть; отключение из уведомления и плитки; QR-импорт; per-app режимы; DNS-исключения; поведение системной блокировки без VPN; автозапуск после перезагрузки (если включён); Always-on (туннель поднимается после перезагрузки и обновления приложения); отозвать VPN из системных настроек; английский язык интерфейса.
 
 Инструментальные тесты запускайте на устройстве без ценных данных: test runner может удалить APK приложения (и его данные) по завершении.
 

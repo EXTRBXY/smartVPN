@@ -32,7 +32,7 @@ ViewModel напрямую делает сокет-соединения (`testPr
 ## P2
 
 ### 7. Глобальные синглтоны с изменяемым состоянием
-`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener`, `ConnectionEventLog`, `LibboxProxyProbe`. Нет внедрения зависимостей (ручной `NothingVpnGraph`, сервис его не использует). Для тестов сервис/мониторы недоступны. Рассмотреть Hilt/Koin или явную передачу через `Graph`; `NothingVpnService` получает политику сериализованной в `Intent`.
+`LibboxAndroidBootstrap`, `DefaultNetworkMonitor`, `DefaultNetworkListener`, `ConnectionEventLog`, `LibboxProxyProbe`. Нет внедрения зависимостей (ручной `NothingVpnGraph`; сервис берёт из него только часть зависимостей через `application`). Для тестов сервис/мониторы недоступны. Рассмотреть Hilt/Koin или явную передачу через `Graph`; `NothingVpnService` получает политику обычного подключения сериализованной в `Intent`.
 
 ### 8. ~~`VpnSessionController` создаёт собственный scope и содержит смесь ответственностей~~ — сделано
 Профили вынесены в `ProfileService`, `dispatcher`/`scope` внедряются. `AndroidSystemVpn` по-прежнему жёстко использует `Main.immediate`/`IO`. Исходное описание:
@@ -68,7 +68,7 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 «Задержка» — TCP connect, не проверка VLESS/Reality; DNS-проверка — TCP на 443. В UI это подано как проверка, документация (README) это признаёт. Можно использовать `urlTest` ядра для активного профиля.
 
 ### 15. Тестовое покрытие — частично
-Добавлены: `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`, `ProfileServiceTest`, `StorageCompatibilityTest`, `VpnErrorTest`. Остаток ниже. Исходное описание:
+Добавлены: `TileModelTest`, `DnsViewModelTest`, `RoutingDraftTest`, `AutomationDecisionsTest`, `ServiceStartDecisionsTest`, `TunnelWatchdogDecisionsTest`, `ProfileServiceTest`, `StorageCompatibilityTest`, `VpnErrorTest`, миграции хранилища в `VaultTest`. Остаток ниже. Исходное описание:
 Отсутствуют тесты: `NothingVpnService`, libbox-мост, `VpnAutomationCoordinator`, большинства ViewModel (есть `DnsViewModelTest`), UI (Compose), миграция. Единственный интеграционный набор — инструментальный и запускается на эмуляторе в CI. Начать с выноса логики решений (`maybeConnect`, `ProfileSecretIntegrity`-подобные) в чистые функции.
 
 ### 16. ~~Локализация~~ — сделано
@@ -87,7 +87,7 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 - `AndroidSessionConfigWriter` — три похожих companion-функции очистки с одинаковыми параметрами.
 - `LogRedaction.redactForLog`: unix-регулярка не маскирует произвольные пути (сохраняет их).
 - `versionCode`/`versionName` захардкожены; нет схемы релизов.
-- CI теперь запускает `lintDebug` (0 ошибок, ~50 предупреждений — разобрать). README и CI используют разные задачи для shared (`testAndroidHostTest` vs `check`; `check` их включает).
+- CI запускает `lintDebug` (0 ошибок, 0 предупреждений на 0.3.0). README и CI используют разные задачи для shared (`testAndroidHostTest` vs `check`; `check` их включает).
 - `QUERY_ALL_PACKAGES`, `CAMERA`, `FINE_LOCATION` в манифесте: пересмотреть при публикации в Play.
 - iOS-таргеты объявлены, `iosApp` нет, а `TunnelPolicy` содержит Android-специфику; `okio` подключён ради одного SHA-256.
 

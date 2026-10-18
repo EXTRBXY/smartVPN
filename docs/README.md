@@ -2,7 +2,7 @@
 
 Android-first VPN-клиент для протокола **VLESS** (TLS / Reality; транспорты tcp / ws / grpc) на ядре **sing-box** (сейчас стабильная `v1.14.3`, см. [sing-box-config.md](sing-box-config.md)), встроенном как `libbox.aar`. Shared-логика — Kotlin Multiplatform, UI — Jetpack Compose. iOS пока только заложен в архитектуре.
 
-Документ описывает состояние кода на момент коммита `287d861`. Ориентир для агентов — [../CLAUDE.md](../CLAUDE.md).
+Документ описывает состояние кода версии 0.3.0 (октябрь 2026). Ориентир для агентов — [../CLAUDE.md](../CLAUDE.md).
 
 ## Оглавление
 

@@ -105,7 +105,7 @@ ViewModel не делают сетевых запросов и не трогаю
 `UserErrorText` — исчерпывающий перевод `VpnError` в строки `strings.xml` (см. [glossary.md](glossary.md)); классификация исключений — в `shared` (`toVpnError`).
 
 ## Тесты androidApp
-- `src/test` (JVM): `storage/VaultTest`, `storage/ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest`, `TileModelTest`, `DnsViewModelTest`, `AutomationDecisionsTest`, `TunnelWatchdogDecisionsTest`.
+- `src/test` (JVM): `storage/VaultTest` (в т.ч. миграции схемы и импорт старых настроек, очередь записи `AppPreferences`), `storage/ProfileSecretIntegrityTest`, `SessionConfigFileLifecycleTest`, `TileModelTest`, `DnsViewModelTest`, `RoutingDraftTest`, `AutomationDecisionsTest`, `ServiceStartDecisionsTest`, `TunnelWatchdogDecisionsTest`.
 - `src/androidTest`: `VpnLifecycleInstrumentationTest` (начальный статус туннеля, удаление старого running-флага, константы action, `stopVpnAndAwait` в остановленном состоянии, замена секрета при upsert).
 
 ## Сборка/ProGuard
