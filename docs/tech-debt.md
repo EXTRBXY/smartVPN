@@ -86,7 +86,7 @@ Enum с мягким сериализатором (`WireEnums.kt`), единый
 - `VpnQuickTileService` и `MainActivity` дублируют регистрацию ресивера; ссылки на `Context.registerReceiver` повторяются 4 раза — вынести в helper.
 - `AndroidSessionConfigWriter` — три похожих companion-функции очистки с одинаковыми параметрами.
 - `LogRedaction.redactForLog`: unix-регулярка не маскирует произвольные пути (сохраняет их).
-- `versionCode`/`versionName` захардкожены; нет схемы релизов.
+- ~~`versionCode`/`versionName` захардкожены; нет схемы релизов.~~ Версия 1.0.0 и публикация APK — [release.md](release.md).
 - CI запускает `lintDebug` (0 ошибок, 0 предупреждений на 0.3.0). README и CI используют разные задачи для shared (`testAndroidHostTest` vs `check`; `check` их включает).
 - `QUERY_ALL_PACKAGES`, `CAMERA`, `FINE_LOCATION` в манифесте: пересмотреть при публикации в Play.
 - iOS-таргеты объявлены, `iosApp` нет, а `TunnelPolicy` содержит Android-специфику; `okio` подключён ради одного SHA-256.

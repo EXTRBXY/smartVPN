@@ -2,6 +2,7 @@ package com.nothing.mobilecore.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.nothing.mobilecore.BuildConfig
 import com.nothing.mobilecore.platform.NothingVpnGraph
 import com.nothing.mobilecore.ui.apps.RoutingViewModel
 import com.nothing.mobilecore.ui.diagnostics.DiagnosticsViewModel
@@ -20,7 +21,13 @@ class AppViewModelFactory(private val graph: NothingVpnGraph) : ViewModelProvide
         ProfileEditViewModel::class.java -> ProfileEditViewModel(graph.profileService, graph.profileRepository, graph.connectivityProbe)
         RoutingViewModel::class.java -> RoutingViewModel(graph.profileRepository, graph.appPreferences, graph.installedApps, graph.sessionController)
         DnsViewModel::class.java -> DnsViewModel(graph.profileRepository, graph.connectivityProbe, graph.installedApps)
-        SettingsViewModel::class.java -> SettingsViewModel(graph.profileRepository, graph.appPreferences, graph.wifiInfo)
+        SettingsViewModel::class.java -> SettingsViewModel(
+            graph.profileRepository,
+            graph.appPreferences,
+            graph.wifiInfo,
+            graph.appUpdates,
+            BuildConfig.VERSION_NAME,
+        )
         DiagnosticsViewModel::class.java -> DiagnosticsViewModel(graph.sessionController, graph.tunnelStatsMonitor, graph.connectivityProbe, graph.eventLog)
         else -> error("Unknown ViewModel: ${modelClass.name}")
     } as T

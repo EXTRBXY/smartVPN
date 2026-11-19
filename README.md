@@ -8,7 +8,7 @@ Android-first мобильный VPN-клиент с архитектурным 
 
 ## Текущее состояние
 
-Версия **0.3.0** (`versionName` в `androidApp/build.gradle.kts`), ядро sing-box **1.14.3-extended-2.7.3** (встроенный `libbox.aar`, только arm64). Android: minSdk 26, targetSdk 35, сборка под SDK 37. Интерфейс на русском и английском.
+Версия **1.0.0** (`versionName` в `androidApp/build.gradle.kts`), ядро sing-box **1.14.3-extended-2.7.3** (встроенный `libbox.aar`, только arm64). Android: minSdk 26, targetSdk 35, сборка под SDK 37. Интерфейс на русском и английском. Обновления — из GitHub Releases, см. [docs/release.md](docs/release.md).
 
 ## Структура проекта
 

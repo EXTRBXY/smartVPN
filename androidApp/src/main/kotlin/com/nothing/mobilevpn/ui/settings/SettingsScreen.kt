@@ -31,6 +31,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.nothing.mobilecore.platform.update.UpdateBusy
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +57,8 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () 
     var healthCheck by rememberSaveable { mutableStateOf(initial.periodicHealthCheck) }
     var trustedWifi by rememberSaveable { mutableStateOf(initial.trustedWifiNames.joinToString("\n")) }
     val currentWifi = remember { vm.currentWifiName() }
+    val updateOffer by vm.updateOffer.collectAsState()
+    val updateBusy by vm.updateBusy.collectAsState()
 
     Scaffold(
         topBar = {
@@ -139,6 +143,40 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () 
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.settings_open_vpn)) }
+
+            HorizontalDivider()
+            Text(stringResource(R.string.update_section), style = MaterialTheme.typography.labelLarge)
+            Text(
+                stringResource(R.string.update_version, vm.appVersion()),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            updateOffer?.let { release ->
+                Text(stringResource(R.string.update_available, release.semver))
+            }
+            OutlinedButton(
+                onClick = vm::checkForUpdate,
+                enabled = updateBusy == UpdateBusy.IDLE,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(
+                        if (updateBusy == UpdateBusy.CHECKING) R.string.update_checking else R.string.update_check,
+                    ),
+                )
+            }
+            if (updateOffer != null) {
+                Button(
+                    onClick = vm::downloadUpdate,
+                    enabled = updateBusy == UpdateBusy.IDLE,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        stringResource(
+                            if (updateBusy == UpdateBusy.DOWNLOADING) R.string.update_downloading else R.string.update_download,
+                        ),
+                    )
+                }
+            }
         }
     }
 }

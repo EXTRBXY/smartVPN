@@ -214,4 +214,19 @@
     <string name="home_traffic">↓ %1$s · ↑ %2$s (сейчас ↓ %3$s/с · ↑ %4$s/с)</string>
     <string name="routing_rule_sets_empty">Сохранённые наборы</string>
     <string name="routing_allowed_empty">Не выбрано ни одного приложения — VPN не подключится. Выберите приложения или другой режим.</string>
+    <string name="update_section">Приложение</string>
+    <string name="update_version">Версия %1$s</string>
+    <string name="update_check">Проверить обновления</string>
+    <string name="update_checking">Проверка…</string>
+    <string name="update_available">Доступна %1$s</string>
+    <string name="update_download">Скачать</string>
+    <string name="update_downloading">Скачивание…</string>
+    <string name="update_later">Позже</string>
+    <string name="update_up_to_date">Установлена последняя версия</string>
+    <string name="update_check_failed">Не удалось проверить обновления</string>
+    <string name="update_download_failed">Не удалось скачать обновление</string>
+    <string name="update_install_permission">Разрешите установку из этого приложения, затем нажмите «Скачать» ещё раз</string>
+    <string name="update_notification_channel">Обновления</string>
+    <string name="update_notification_title">Доступно обновление</string>
+    <string name="update_notification_text">Версия %1$s</string>
 </resources>

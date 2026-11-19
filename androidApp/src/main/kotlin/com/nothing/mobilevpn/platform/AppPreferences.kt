@@ -34,6 +34,10 @@ data class AppSettings(
     val routingRuleSets: List<RoutingRuleSet> = emptyList(),
     /** Пользователь хочет, чтобы VPN был включён (для автоматизации: переподключение, загрузка). */
     val connectionRequested: Boolean = false,
+    /** Момент последней успешной проверки GitHub, миллисекунды UTC. 0 — ещё не проверяли. */
+    val updateLastCheckEpochMs: Long = 0,
+    /** Тег релиза, от которого пользователь отказался кнопкой «Позже». */
+    val updateDismissedTag: String = "",
 )
 
 /**
@@ -96,6 +100,14 @@ class AppPreferences internal constructor(
     var connectionRequested: Boolean
         get() = current.connectionRequested
         set(value) = write { it.copy(connectionRequested = value) }
+
+    fun updateLastCheckEpochMs(): Long = current.updateLastCheckEpochMs
+
+    fun updateDismissedTag(): String = current.updateDismissedTag
+
+    fun recordUpdateCheck(epochMs: Long) = write { it.copy(updateLastCheckEpochMs = epochMs) }
+
+    fun dismissUpdate(tag: String) = write { it.copy(updateDismissedTag = tag) }
 
     private fun updateAutomation(transform: (AutomationSettings) -> AutomationSettings) =
         write { it.copy(automation = transform(it.automation)) }

@@ -3,7 +3,6 @@ package com.nothing.mobilecore
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.os.Build
 import com.nothing.mobilecore.libbox.LibboxAndroidBootstrap
 import com.nothing.mobilecore.platform.NothingVpnGraph
 import com.nothing.mobilecore.platform.ConnectionEventLog
@@ -29,12 +28,22 @@ class NothingVpnApp : Application() {
         LibboxAndroidBootstrap.ensureSetup()
         automation.start()
         graph.tunnelStatsMonitor.start()
-        val ch = NotificationChannel(
-            CHANNEL_VPN,
-            getString(R.string.vpn_notification_title),
-            NotificationManager.IMPORTANCE_LOW,
+        graph.appUpdates.start(applicationScope)
+        val notifications = getSystemService(NotificationManager::class.java)
+        notifications.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_VPN,
+                getString(R.string.vpn_notification_title),
+                NotificationManager.IMPORTANCE_LOW,
+            ),
         )
-        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+        notifications.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_UPDATE,
+                getString(R.string.update_notification_channel),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
     }
 
     /**
@@ -58,6 +67,7 @@ class NothingVpnApp : Application() {
 
     companion object {
         const val CHANNEL_VPN = "nothing_vpn"
+        const val CHANNEL_UPDATE = "nothing_vpn_updates"
         const val NOTIFICATION_ID = 1001
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nothing.mobilecore.platform.AppPreferences
 import com.nothing.mobilecore.platform.AutomationSettings
 import com.nothing.mobilecore.platform.WifiInfoProvider
+import com.nothing.mobilecore.platform.update.AppUpdateController
 import com.nothing.mobilecore.shared.application.ProfileRepositoryPort
 import kotlinx.coroutines.launch
 
@@ -12,7 +13,15 @@ class SettingsViewModel(
     private val profiles: ProfileRepositoryPort,
     private val preferences: AppPreferences,
     private val wifiInfo: WifiInfoProvider,
+    private val updates: AppUpdateController,
+    private val versionName: String,
 ) : ViewModel() {
+    val updateOffer = updates.offer
+    val updateBusy = updates.busy
+
+    fun appVersion(): String = versionName
+    fun checkForUpdate() = updates.checkNow()
+    fun downloadUpdate() = updates.download()
 
     fun automationSettings(): AutomationSettings = preferences.automation()
     fun currentWifiName(): String? = wifiInfo.currentSsid()

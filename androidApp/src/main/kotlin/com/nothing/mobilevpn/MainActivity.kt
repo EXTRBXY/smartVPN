@@ -11,11 +11,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.nothing.mobilecore.ui.AppViewModelFactory
 import com.nothing.mobilecore.ui.NothingVpnTheme
 import com.nothing.mobilecore.ui.navigation.AppNavGraph
+import com.nothing.mobilecore.ui.update.UpdateHost
 import com.nothing.mobilecore.ui.profiles.ImportViewModel
 
 /**
@@ -59,11 +63,14 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             NothingVpnTheme {
-                AppNavGraph(
-                    factory = factory,
-                    onScanQr = ::launchQrScanner,
-                    onPrepareVpnAndConnect = ::prepareVpnAndConnect,
-                )
+                Box(Modifier.fillMaxSize()) {
+                    AppNavGraph(
+                        factory = factory,
+                        onScanQr = ::launchQrScanner,
+                        onPrepareVpnAndConnect = ::prepareVpnAndConnect,
+                    )
+                    UpdateHost((application as NothingVpnApp).graph.appUpdates)
+                }
             }
         }
     }

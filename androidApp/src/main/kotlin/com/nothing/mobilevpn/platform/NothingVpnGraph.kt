@@ -1,7 +1,11 @@
 package com.nothing.mobilecore.platform
 
 import android.content.Context
+import com.nothing.mobilecore.BuildConfig
 import com.nothing.mobilecore.platform.storage.AndroidLegacySettingsSource
+import com.nothing.mobilecore.platform.update.AppUpdateController
+import com.nothing.mobilecore.platform.update.GitHubReleaseClient
+import com.nothing.mobilecore.platform.update.UpdateApkDownloader
 import com.nothing.mobilecore.platform.storage.AndroidLegacySource
 import com.nothing.mobilecore.platform.storage.KeystoreVaultCipher
 import com.nothing.mobilecore.platform.storage.VaultBootstrap
@@ -55,4 +59,11 @@ class NothingVpnGraph(context: Context) {
         eventLog = { ConnectionEventLog.add(appContext, it) },
     )
     val profileService = ProfileService(profileRepository, isTunnelBusy = { sessionController.isBusy })
+    val appUpdates = AppUpdateController(
+        context = appContext,
+        preferences = appPreferences,
+        client = GitHubReleaseClient(appContext),
+        downloader = UpdateApkDownloader(appContext),
+        currentVersion = BuildConfig.VERSION_NAME,
+    )
 }

@@ -2,7 +2,7 @@
 
 Android-first VPN-клиент для протокола **VLESS** (TLS / Reality; транспорты tcp / ws / grpc / xhttp) на ядре **sing-box** (см. [sing-box-config.md](sing-box-config.md)), встроенном как `libbox.aar`. Официальный тег 1.14.3 не умеет XHTTP, поэтому AAR собран из `shtorm-7/sing-box-extended` `v1.14.3-extended-2.7.3`. Shared-логика — Kotlin Multiplatform, UI — Jetpack Compose. iOS пока только заложен в архитектуре.
 
-Документ описывает состояние кода версии 0.3.0 (октябрь 2026). Ориентир для агентов — [../CLAUDE.md](../CLAUDE.md).
+Документ описывает состояние кода версии 1.0.0. Ориентир для агентов — [../CLAUDE.md](../CLAUDE.md).
 
 ## Оглавление
 
@@ -16,6 +16,7 @@ Android-first VPN-клиент для протокола **VLESS** (TLS / Realit
 | [data-and-storage.md](data-and-storage.md) | Где и что хранится, шифрование, миграция, session-файлы |
 | [security.md](security.md) | Модель угроз и реализованные меры |
 | [build-and-test.md](build-and-test.md) | Сборка, libbox.aar, подпись, CI, тесты, ручная проверка |
+| [release.md](release.md) | GitHub Releases, проверка обновлений, установка APK |
 | [testing-checklist.md](testing-checklist.md) | Чек-лист тестовой эксплуатации и как сообщать о проблемах |
 | [tech-debt.md](tech-debt.md) | Наблюдения для предстоящего рефакторинга (с приоритетами) |
 | [glossary.md](glossary.md) | Термины и коды ошибок |

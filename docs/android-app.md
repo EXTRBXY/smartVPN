@@ -6,13 +6,14 @@
 
 | Элемент | Значение |
 |---|---|
-| Разрешения | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `ACCESS_FINE/COARSE_LOCATION` (SSID Wi-Fi и `NeedWIFIState` ядра, как в SFA), `CHANGE_NETWORK_STATE`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `CAMERA` (QR; `uses-feature camera required=false`), `QUERY_ALL_PACKAGES` (список всех приложений для split tunneling; осознанно для личного распространения) |
+| Разрешения | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `ACCESS_FINE/COARSE_LOCATION` (SSID Wi-Fi и `NeedWIFIState` ядра, как в SFA), `CHANGE_NETWORK_STATE`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `CAMERA` (QR; `uses-feature camera required=false`), `QUERY_ALL_PACKAGES` (список всех приложений для split tunneling; осознанно для личного распространения), `REQUEST_INSTALL_PACKAGES` (установка скачанного APK обновления) |
 | `<application>` | `NothingVpnApp`, `allowBackup=false`, `networkSecurityConfig` (cleartext запрещён), правила backup/extraction пустые |
 | `MainActivity` | launcher + `QS_TILE_PREFERENCES` (долгое нажатие на плитку открывает приложение), `adjustResize` |
 | `NothingVpnService` | `exported=false`, `BIND_VPN_SERVICE`, `foregroundServiceType=connectedDevice`, action `android.net.VpnService` |
 | `BootCompletedReceiver` | `exported=true`, `BOOT_COMPLETED` и `MY_PACKAGE_REPLACED` |
 | `TunnelWatchdogJobService` | `exported=false`, `BIND_JOB_SERVICE` (сторож туннеля, см. [vpn-lifecycle.md](vpn-lifecycle.md)) |
 | `VpnQuickTileService` | `exported=true`, `BIND_QUICK_SETTINGS_TILE`, `QS_TILE` |
+| `FileProvider` | `exported=false`, отдаёт скачанный APK обновления из `cache/updates` |
 
 Строки: русские (основные) — `res/values/strings.xml`, английские — `res/values-en/strings.xml`; тема — `ui/NothingVpnTheme.kt` (циан `#28C6D9`, динамические цвета Material 3 на Android 12+). Все тексты интерфейса — в `strings.xml` (в коде `stringResource` в composable и `context.getString` в колбэках); захардкоженных русских строк в Kotlin нет. Набор ключей в обоих файлах одинаковый; новая строка добавляется в оба. Язык приложения выбирается в системных настройках (Android 13+): `generateLocaleConfig` + `res/resources.properties` (`unqualifiedResLocale=ru`).
 
@@ -57,7 +58,8 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 | `TunnelStatsMonitor` | Цикл: пока `TunnelStatus.Running`, подключается `CommandClient` с `CommandStatus` раз в секунду и публикует `StateFlow<TunnelStats>` (скорости, итоги, число соединений) |
 | `ProfileRepositoryAndroid` | `ProfileRepositoryPort` поверх `storage/VaultStore` (профили с секретами, активный профиль, политика) |
 | `storage/*` | Зашифрованное хранилище: `KeystoreVaultCipher`, `VaultFile`, `StoredVault`, `VaultStore`, загрузка и двухфазная миграция `VaultBootstrap`, чтение старых данных `AndroidLegacySource`/`LegacyDecoder`/`ProfileSecretIntegrity`. См. [data-and-storage.md](data-and-storage.md) |
-| `AppPreferences` | Раздел `settings` зашифрованного `StoredVault`: флаги автоматизации, доверенные Wi-Fi, наборы маршрутизации (`RoutingRuleSet`), `connectionRequested`; запись через фоновую очередь |
+| `AppPreferences` | Раздел `settings` зашифрованного `StoredVault`: флаги автоматизации, доверенные Wi-Fi, наборы маршрутизации (`RoutingRuleSet`), `connectionRequested`, метка проверки обновления; запись через фоновую очередь |
+| `update/*` | Проверка GitHub Releases, скачивание APK мимо VPN, предложение установки. См. [release.md](release.md) |
 | `VpnAutomationCoordinator` | Автоподключение и health-монитор (см. [vpn-lifecycle.md](vpn-lifecycle.md)) |
 | `BootCompletedReceiver` | → `automation.onBootCompleted()` через `goAsync()` |
 | `TunnelWatchdog` + `TunnelWatchdogJobService` | Periodic persisted job (15 мин), пока туннель `Running` и `connectionRequested`; в новом процессе → `automation.restoreTunnel(PROCESS_RESTART)`. Решения — `TunnelWatchdogDecisions.kt` |
@@ -84,6 +86,7 @@ Intent-протокол (`companion`): `ACTION_CONNECT` (`EXTRA_SESSION_ID`, `EX
 | `ui/apps` | `RoutingScreen` + `RoutingViewModel` (режим и выбор приложений в одном месте), `AppSelection.kt` (общий блок: поиск, фильтры, массовый выбор, список), `AppPicker.kt` (`AppPickerRow`, `AppPackageIcon`, LRU-кэш иконок) |
 | `ui/dns` | `DnsScreen`, `DnsAppsScreen`, общий `DnsViewModel` |
 | `ui/settings` | `SettingsScreen` + `SettingsViewModel` |
+| `ui/update` | Диалог предложения обновления |
 | `ui/diagnostics` | `DiagnosticsScreen` + `DiagnosticsViewModel` |
 | `ui/` | `AppViewModelFactory` (все ViewModel из `NothingVpnGraph`), `UserErrorText`, `NothingVpnTheme` |
 

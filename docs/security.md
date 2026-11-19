@@ -21,7 +21,8 @@ UUID профиля и параметры Reality (`pbk`, `sid`); адрес с�
 | Резервное копирование | Отключено | `allowBackup=false`, пустые rules |
 | Release | `isDebuggable=false`, R8; подпись release-ключом из env (`RELEASE_STORE_FILE/PASSWORD`, `RELEASE_KEY_ALIAS/PASSWORD`); без них release не подписан. `localRelease` — подпись debug-ключом, только для локальной установки | `androidApp/build.gradle.kts` |
 | Рабочие каталоги ядра | Внутреннее хранилище (`filesDir/runtime`) | `LibboxAndroidBootstrap` |
-| Защита сокетов ядра | `protect(fd)` через `autoDetectInterfaceControl` — трафик ядра не заворачивается обратно в туннель | `NothingVpnService` |
+| Защита сокетов ядра | `protect(fd)` через `autoDetectInterfaceControl` и `bindInterfaceControl` — трафик ядра не заворачивается обратно в туннель | `NothingVpnService` |
+| Обновления | `GET` последнего релиза GitHub; скачивание APK только https и с allowlist хостов GitHub, мимо своего VPN; установка через системный установщик | `platform/update/`, [release.md](release.md) |
 
 ## Ограничения и риски (известные)
 

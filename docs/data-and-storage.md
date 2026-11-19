@@ -4,7 +4,7 @@
 
 | Хранилище | Тип | Что хранит | Класс |
 |---|---|---|---|
-| `noBackupFilesDir/vault/state.bin` | зашифрованный файл (AES-256-GCM, ключ в Android Keystore) | JSON `StoredVault`: профили **вместе с секретами**, `activeProfileId`, `TunnelPolicy`, `settings` (`AppSettings`: автоматизация, доверенные Wi-Fi, наборы приложений, `connectionRequested`), служебные флаги миграции | `VaultFile`, `VaultStore`, `ProfileRepositoryAndroid`, `AppPreferences` |
+| `noBackupFilesDir/vault/state.bin` | зашифрованный файл (AES-256-GCM, ключ в Android Keystore) | JSON `StoredVault`: профили **вместе с секретами**, `activeProfileId`, `TunnelPolicy`, `settings` (`AppSettings`: автоматизация, доверенные Wi-Fi, наборы приложений, `connectionRequested`, время проверки обновления и отклонённый тег релиза), служебные флаги миграции | `VaultFile`, `VaultStore`, `ProfileRepositoryAndroid`, `AppPreferences` |
 | `nothing_vpn_diagnostics` | SharedPreferences | журнал событий (≤80 строк) | `ConnectionEventLog` |
 | `noBackupFilesDir/sing-box-session-*.json(.tmp)` | файлы | JSON-конфиг сессии с секретами (живёт секунды) | `AndroidSessionConfigWriter` |
 | `filesDir/runtime`, `cacheDir` | каталоги libbox | рабочие данные и temp ядра | `LibboxAndroidBootstrap` |

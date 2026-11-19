@@ -6,7 +6,7 @@
 - Для iOS-таргетов `shared` нужен macOS; на Windows они пропускаются (`kotlin.native.ignoreDisabledTargets=true`).
 
 ## Версии и параметры (`gradle.properties`, `build.gradle.kts`)
-AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compileSdk 37 · targetSdk 35 · minSdk 26 (в `gradle.properties`) · JVM 17 · `org.gradle.jvmargs=-Xmx3g` · `versionCode`/`versionName` — в `androidApp/build.gradle.kts`.
+AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compileSdk 37 · targetSdk 35 · minSdk 26 (в `gradle.properties`) · JVM 17 · `org.gradle.jvmargs=-Xmx3g` · `versionCode`/`versionName` — в `androidApp/build.gradle.kts` (сейчас 1.0.0 / 4). Публикация подписанного APK — [release.md](release.md).
 
 ## Команды
 
