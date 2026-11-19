@@ -33,6 +33,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platforms;android-37 platform-tools build-tools;36.0.0
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -57,7 +62,25 @@ jobs:
             echo "Нужны secrets RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD."
             exit 1
           fi
-          bash ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleRelease
+          if ! keytool -list -keystore "$RELEASE_STORE_FILE" -alias "$RELEASE_KEY_ALIAS" -storepass "$RELEASE_STORE_PASSWORD" >"$RUNNER_TEMP/keytool.txt" 2>&1; then
+            echo "Ключ подписи не открывается. Проверьте RELEASE_STORE_PASSWORD и RELEASE_KEY_ALIAS."
+            cat "$RUNNER_TEMP/keytool.txt"
+            exit 1
+          fi
+          set +e
+          set -o pipefail
+          bash ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleRelease 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## Gradle"
+              echo '```'
+              tail -n 80 "$RUNNER_TEMP/gradle.log"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$status"
+          fi
           apk="androidApp/build/outputs/apk/release/androidApp-release.apk"
           if [ ! -f "$apk" ]; then
             echo "Подписанный APK не появился. Проверьте secrets подписи."
