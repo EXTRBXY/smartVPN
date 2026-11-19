@@ -1,0 +1,36 @@
+name: Android SDK
+description: Ставит cmdline-tools и platform 37.0 в каталог раннера
+runs:
+  using: composite
+  steps:
+    - name: Install
+      shell: bash
+      run: |
+        set -euo pipefail
+        root="${RUNNER_TEMP}/android-sdk"
+        tools="$root/cmdline-tools/latest"
+        mkdir -p "$root/cmdline-tools"
+        if [ ! -x "$tools/bin/sdkmanager" ]; then
+          curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip" -o "$RUNNER_TEMP/commandlinetools.zip"
+          rm -rf "$root/cmdline-tools/unpack"
+          unzip -q "$RUNNER_TEMP/commandlinetools.zip" -d "$root/cmdline-tools/unpack"
+          rm -rf "$tools"
+          mv "$root/cmdline-tools/unpack/cmdline-tools" "$tools"
+          rm -rf "$root/cmdline-tools/unpack"
+        fi
+        set +o pipefail
+        yes | "$tools/bin/sdkmanager" --sdk_root="$root" --licenses >/dev/null 2>&1 || true
+        set -o pipefail
+        log="$RUNNER_TEMP/sdkmanager.log"
+        set +e
+        "$tools/bin/sdkmanager" --sdk_root="$root" "platforms;android-37.0" "build-tools;36.0.0" "platform-tools" >"$log" 2>&1
+        status=$?
+        set -e
+        if [ "$status" -ne 0 ]; then
+          msg=$(tail -n 20 "$log" | tr '\n' ' ' | cut -c1-700)
+          echo "::error title=Android SDK::$msg"
+          cat "$log"
+          exit "$status"
+        fi
+        echo "ANDROID_SDK_ROOT=$root" >> "$GITHUB_ENV"
+        echo "ANDROID_HOME=$root" >> "$GITHUB_ENV"

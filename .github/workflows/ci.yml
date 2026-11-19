@@ -21,9 +21,7 @@ jobs:
           java-version: '17'
 
       - name: Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: platforms;android-37 platform-tools build-tools;36.0.0
+        uses: ./.github/actions/android-sdk
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

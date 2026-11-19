@@ -15,7 +15,7 @@
 1. Поднять `versionName` и `versionCode` (код только растёт).
 2. Закоммитить это в `main`.
 3. Поставить тег `v` + `versionName`, например `v1.0.0`, на этот коммит и отправить тег.
-4. Workflow `.github/workflows/release.yml` ставит Android SDK (platform 37), собирает `assembleRelease`, проверяет, что тег совпал с `versionName`, и публикует ассеты `NothingMobileVpn.apk` и `NothingMobileVpn.apk.sha256`.
+4. Workflow `.github/workflows/release.yml` ставит Android SDK (platform 37.0), собирает `assembleRelease`, проверяет, что тег совпал с `versionName`, и публикует ассеты `NothingMobileVpn.apk` и `NothingMobileVpn.apk.sha256`.
 
 Секреты репозитория:
 
