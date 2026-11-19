@@ -2,6 +2,9 @@ package com.nothing.mobilecore.shared.infrastructure
 
 import com.nothing.mobilecore.shared.domain.VlessSecurity
 import com.nothing.mobilecore.shared.domain.VlessTransport
+import com.nothing.mobilecore.shared.domain.XhttpExtra
+import com.nothing.mobilecore.shared.domain.XhttpPolicy
+import com.nothing.mobilecore.shared.domain.XhttpXmux
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.ensure
 import com.nothing.mobilecore.shared.domain.vpnFail
@@ -14,6 +17,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -70,7 +74,9 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
         put("server", JsonPrimitive(profile.host))
         put("server_port", JsonPrimitive(profile.port))
         put("uuid", JsonPrimitive(profile.uuid))
-        profile.flow?.let { put("flow", JsonPrimitive(it)) }
+        if (profile.type != VlessTransport.XHTTP) {
+            profile.flow?.let { put("flow", JsonPrimitive(it)) }
+        }
         buildTls(profile)?.let { put("tls", it) }
         buildTransport(profile)?.let { put("transport", it) }
     }
@@ -118,7 +124,53 @@ class SingBoxConfigCompiler : SingBoxConfigCompilerPort {
                 put("type", JsonPrimitive("grpc"))
                 put("service_name", JsonPrimitive(profile.grpcServiceName ?: "default"))
             }
+            VlessTransport.XHTTP -> buildXhttpTransport(profile)
         }
+
+    private fun buildXhttpTransport(profile: VlessProfile): JsonObject {
+        XhttpPolicy.requireValid(profile)
+        val extra = profile.xhttpExtra
+        return buildJsonObject {
+            put("type", JsonPrimitive("xhttp"))
+            put("mode", JsonPrimitive(profile.xhttpMode.wire))
+            put("path", JsonPrimitive(profile.xhttpPath?.takeIf { it.isNotBlank() } ?: XhttpPolicy.DEFAULT_PATH))
+            profile.xhttpHost?.takeIf { it.isNotBlank() }?.let { put("host", JsonPrimitive(it)) }
+            put("x_padding_bytes", JsonPrimitive(extra?.xPaddingBytes ?: XhttpPolicy.DEFAULT_PADDING))
+            extra?.let { putXhttpExtra(it) }
+        }
+    }
+
+    private fun JsonObjectBuilder.putXhttpExtra(extra: XhttpExtra) {
+        extra.headers?.takeIf { it.isNotEmpty() }?.let { headers ->
+            put("headers", buildJsonObject { headers.forEach { (name, value) -> put(name, JsonPrimitive(value)) } })
+        }
+        extra.xPaddingObfsMode?.let { put("x_padding_obfs_mode", JsonPrimitive(it)) }
+        extra.xPaddingKey?.let { put("x_padding_key", JsonPrimitive(it)) }
+        extra.xPaddingHeader?.let { put("x_padding_header", JsonPrimitive(it)) }
+        extra.xPaddingPlacement?.let { put("x_padding_placement", JsonPrimitive(it)) }
+        extra.xPaddingMethod?.let { put("x_padding_method", JsonPrimitive(it)) }
+        extra.uplinkHTTPMethod?.let { put("uplink_http_method", JsonPrimitive(it)) }
+        extra.sessionPlacement?.let { put("session_placement", JsonPrimitive(it)) }
+        extra.sessionKey?.let { put("session_key", JsonPrimitive(it)) }
+        extra.seqPlacement?.let { put("seq_placement", JsonPrimitive(it)) }
+        extra.seqKey?.let { put("seq_key", JsonPrimitive(it)) }
+        extra.uplinkDataPlacement?.let { put("uplink_data_placement", JsonPrimitive(it)) }
+        extra.uplinkDataKey?.let { put("uplink_data_key", JsonPrimitive(it)) }
+        extra.uplinkChunkSize?.let { put("uplink_chunk_size", JsonPrimitive(it)) }
+        extra.noGRPCHeader?.let { put("no_grpc_header", JsonPrimitive(it)) }
+        extra.scMaxEachPostBytes?.let { put("sc_max_each_post_bytes", JsonPrimitive(it)) }
+        extra.scMinPostsIntervalMs?.let { put("sc_min_posts_interval_ms", JsonPrimitive(it)) }
+        extra.xmux?.let { put("xmux", it.toSingBoxJson()) }
+    }
+
+    private fun XhttpXmux.toSingBoxJson(): JsonObject = buildJsonObject {
+        maxConcurrency?.let { put("max_concurrency", JsonPrimitive(it)) }
+        maxConnections?.let { put("max_connections", JsonPrimitive(it)) }
+        cMaxReuseTimes?.let { put("c_max_reuse_times", JsonPrimitive(it)) }
+        hMaxRequestTimes?.let { put("h_max_request_times", JsonPrimitive(it)) }
+        hMaxReusableSecs?.let { put("h_max_reusable_secs", JsonPrimitive(it)) }
+        hKeepAlivePeriod?.let { put("h_keep_alive_period", JsonPrimitive(it)) }
+    }
 
     private fun buildDns(policy: TunnelPolicy): JsonObject? =
         when (policy.dnsMode) {

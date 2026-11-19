@@ -5,6 +5,9 @@ import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VlessSecurity
 import com.nothing.mobilecore.shared.domain.VlessTransport
+import com.nothing.mobilecore.shared.domain.XhttpExtra
+import com.nothing.mobilecore.shared.domain.XhttpMode
+import com.nothing.mobilecore.shared.domain.XhttpXmux
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -114,5 +117,32 @@ class SingBoxConfigCompilerTest {
         val types = Json.parseToJsonElement(json).jsonObject["outbounds"]!!.jsonArray
             .map { it.jsonObject["type"]!!.jsonPrimitive.content }
         assertEquals(listOf("vless", "selector", "direct"), types)
+    }
+
+    @Test
+    fun compile_xhttpTransportUsesSingBoxFieldNames() {
+        val xhttp = profile.copy(
+            type = VlessTransport.XHTTP,
+            flow = "xtls-rprx-vision",
+            xhttpPath = "/xhttp",
+            xhttpHost = "cdn.example",
+            xhttpMode = XhttpMode.STREAM_ONE,
+            xhttpExtra = XhttpExtra(
+                xPaddingBytes = "100-200",
+                noGRPCHeader = true,
+                xmux = XhttpXmux(maxConcurrency = "8-16"),
+            ),
+        )
+        val json = Json.parseToJsonElement(SingBoxConfigCompiler().compile(xhttp, policy).getOrThrow())
+        val outbound = json.jsonObject["outbounds"]!!.jsonArray.first().jsonObject
+        assertEquals(null, outbound["flow"])
+        val transport = outbound["transport"]!!.jsonObject
+        assertEquals("xhttp", transport["type"]!!.jsonPrimitive.content)
+        assertEquals("stream-one", transport["mode"]!!.jsonPrimitive.content)
+        assertEquals("/xhttp", transport["path"]!!.jsonPrimitive.content)
+        assertEquals("cdn.example", transport["host"]!!.jsonPrimitive.content)
+        assertEquals("100-200", transport["x_padding_bytes"]!!.jsonPrimitive.content)
+        assertEquals(true, transport["no_grpc_header"]!!.jsonPrimitive.content.toBoolean())
+        assertEquals("8-16", transport["xmux"]!!.jsonObject["max_concurrency"]!!.jsonPrimitive.content)
     }
 }

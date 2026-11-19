@@ -203,6 +203,10 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         protect(fd)
     }
 
+    override fun bindInterfaceControl(fd: Int, interfaceName: String) {
+        protect(fd)
+    }
+
     override fun openTun(options: TunOptions): Int {
         if (prepare(this) != null) vpnFail(VpnError.VpnPermissionMissing)
 

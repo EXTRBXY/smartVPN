@@ -33,6 +33,11 @@ if (-not $env:JAVA_HOME) {
     Write-Error "Задайте JAVA_HOME (OpenJDK 17)."
 }
 
+# Go 1.22+ отклоняет -l:libcronet.a из with_naive_outbound, пока флаг не разрешён явно.
+if (-not $env:CGO_LDFLAGS_ALLOW) {
+    $env:CGO_LDFLAGS_ALLOW = "-l:.*"
+}
+
 Push-Location $SingBoxRoot
 try {
     # go пишет прогресс в stderr; в Windows PowerShell 5.1 при "Stop" это стало бы фатальной

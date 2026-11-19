@@ -43,7 +43,8 @@
     <string name="user_error_invalid_uuid">Некорректный UUID в ссылке.</string>
     <string name="user_error_invalid_host_or_port">Проверьте адрес сервера и порт в ссылке.</string>
     <string name="user_error_link_invalid">Ссылка повреждена или неполная.</string>
-    <string name="user_error_link_unsupported">Параметры ссылки не поддерживаются (нужны encryption=none, tls/reality/none, tcp/ws/grpc).</string>
+    <string name="user_error_link_unsupported">Параметры ссылки не поддерживаются (нужны encryption=none, tls/reality/none, tcp/ws/grpc/xhttp).</string>
+    <string name="user_error_xhttp_invalid">Параметры XHTTP не поддерживаются.</string>
     <string name="user_error_profile_delete_requires_disconnect">Отключите VPN перед удалением активного профиля.</string>
     <string name="user_error_profile_name_required">Укажите имя профиля.</string>
     <string name="user_error_profile_host_required">Укажите адрес сервера.</string>

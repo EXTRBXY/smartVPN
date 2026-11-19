@@ -42,6 +42,7 @@ enum class VlessTransport(override val wire: String) : WireValue {
     TCP("tcp"),
     WS("ws"),
     GRPC("grpc"),
+    XHTTP("xhttp"),
     ;
 
     object Serializer : LenientWireSerializer<VlessTransport>("VlessTransport", VlessTransport.entries, TCP)
@@ -76,6 +77,22 @@ enum class VlessEncryption(override val wire: String) : WireValue {
 
     companion object {
         fun parse(raw: String?): VlessEncryption? = fromWire(VlessEncryption.entries, raw)
+    }
+}
+
+/** Режим XHTTP. Неизвестное значение в хранилище читается как auto. */
+@Serializable(with = XhttpMode.Serializer::class)
+enum class XhttpMode(override val wire: String) : WireValue {
+    AUTO("auto"),
+    PACKET_UP("packet-up"),
+    STREAM_UP("stream-up"),
+    STREAM_ONE("stream-one"),
+    ;
+
+    object Serializer : LenientWireSerializer<XhttpMode>("XhttpMode", XhttpMode.entries, AUTO)
+
+    companion object {
+        fun parse(raw: String?): XhttpMode? = fromWire(XhttpMode.entries, raw)
     }
 }
 

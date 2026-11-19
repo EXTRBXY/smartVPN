@@ -4,6 +4,9 @@ import com.nothing.mobilecore.shared.domain.VlessSecurity
 import com.nothing.mobilecore.shared.domain.VlessTransport
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnException
+import com.nothing.mobilecore.shared.domain.XhttpExtra
+import com.nothing.mobilecore.shared.domain.XhttpMode
+import com.nothing.mobilecore.shared.domain.XhttpXmux
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -54,5 +57,57 @@ class VlessLinkParserTest {
             )
         }
         assertEquals(VpnError.LinkUnsupported, e.error)
+    }
+
+    @Test
+    fun parse_xhttp_andLegacySplithttp() {
+        val link =
+            "vless://12345678-1234-4123-8123-123456789abc@example.com:443" +
+                "?type=xhttp&security=reality&encryption=none&pbk=aaa&sid=bbb&sni=real.example" +
+                "&path=%2Fxhttp&host=cdn.example&mode=stream-up&flow=xtls-rprx-vision" +
+                "&extra=%7B%22xPaddingBytes%22%3A%22100-200%22%2C%22noGRPCHeader%22%3Atrue%7D#x"
+        val parsed = VlessLinkParser.parse(link)
+        assertEquals(VlessTransport.XHTTP, parsed.type)
+        assertEquals("/xhttp", parsed.xhttpPath)
+        assertEquals("cdn.example", parsed.xhttpHost)
+        assertEquals(XhttpMode.STREAM_UP, parsed.xhttpMode)
+        assertEquals(null, parsed.flow)
+        assertEquals(null, parsed.wsPath)
+        assertEquals(XhttpExtra(xPaddingBytes = "100-200", noGRPCHeader = true), parsed.xhttpExtra)
+
+        val legacy = VlessLinkParser.parse(
+            "vless://12345678-1234-4123-8123-123456789abc@example.com:443?type=splithttp&security=tls&encryption=none",
+        )
+        assertEquals(VlessTransport.XHTTP, legacy.type)
+        assertEquals(XhttpMode.AUTO, legacy.xhttpMode)
+    }
+
+    @Test
+    fun parse_xhttp_rejectsContradictingModeAndUnknownExtra() {
+        val mode = assertFailsWith<VpnException> {
+            VlessLinkParser.parse(
+                "vless://12345678-1234-4123-8123-123456789abc@h:1?type=xhttp&security=tls" +
+                    "&mode=auto&extra=%7B%22mode%22%3A%22packet-up%22%7D",
+            )
+        }
+        assertEquals(VpnError.XhttpInvalid, mode.error)
+
+        val unknown = assertFailsWith<VpnException> {
+            VlessLinkParser.parse(
+                "vless://12345678-1234-4123-8123-123456789abc@h:1?type=xhttp&security=tls" +
+                    "&extra=%7B%22downloadSettings%22%3A%7B%7D%7D",
+            )
+        }
+        assertEquals(VpnError.XhttpInvalid, unknown.error)
+    }
+
+    @Test
+    fun grpcMode_staysInExtraQuery() {
+        val parsed = VlessLinkParser.parse(
+            "vless://12345678-1234-4123-8123-123456789abc@example.com:443?type=grpc&security=tls&mode=gun&serviceName=svc",
+        )
+        assertEquals(VlessTransport.GRPC, parsed.type)
+        assertEquals("gun", parsed.extraQuery["mode"])
+        assertEquals("svc", parsed.grpcServiceName)
     }
 }

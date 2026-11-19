@@ -1,6 +1,6 @@
 # Документация Nothing Mobile VPN
 
-Android-first VPN-клиент для протокола **VLESS** (TLS / Reality; транспорты tcp / ws / grpc) на ядре **sing-box** (сейчас стабильная `v1.14.3`, см. [sing-box-config.md](sing-box-config.md)), встроенном как `libbox.aar`. Shared-логика — Kotlin Multiplatform, UI — Jetpack Compose. iOS пока только заложен в архитектуре.
+Android-first VPN-клиент для протокола **VLESS** (TLS / Reality; транспорты tcp / ws / grpc / xhttp) на ядре **sing-box** (см. [sing-box-config.md](sing-box-config.md)), встроенном как `libbox.aar`. Официальный тег 1.14.3 не умеет XHTTP, поэтому AAR собран из `shtorm-7/sing-box-extended` `v1.14.3-extended-2.7.3`. Shared-логика — Kotlin Multiplatform, UI — Jetpack Compose. iOS пока только заложен в архитектуре.
 
 Документ описывает состояние кода версии 0.3.0 (октябрь 2026). Ориентир для агентов — [../CLAUDE.md](../CLAUDE.md).
 

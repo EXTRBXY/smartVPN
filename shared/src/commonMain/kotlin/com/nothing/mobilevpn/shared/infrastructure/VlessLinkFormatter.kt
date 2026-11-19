@@ -1,7 +1,9 @@
 package com.nothing.mobilecore.shared.infrastructure
 
 import com.nothing.mobilecore.shared.domain.VlessProfile
+import com.nothing.mobilecore.shared.domain.VlessTransport
 import com.nothing.mobilecore.shared.domain.VpnError
+import com.nothing.mobilecore.shared.domain.canonicalJson
 import com.nothing.mobilecore.shared.domain.ensure
 
 object VlessLinkFormatter {
@@ -17,9 +19,16 @@ object VlessLinkFormatter {
         if (profile.alpn.isNotEmpty()) query["alpn"] = profile.alpn.joinToString(",")
         profile.realityPublicKey?.let { query["pbk"] = it }
         profile.realityShortId?.let { query["sid"] = it }
-        profile.wsPath?.let { query["path"] = it }
-        profile.wsHost?.let { query["host"] = it }
-        profile.grpcServiceName?.let { query["serviceName"] = it }
+        if (profile.type == VlessTransport.XHTTP) {
+            profile.xhttpPath?.let { query["path"] = it }
+            profile.xhttpHost?.let { query["host"] = it }
+            query["mode"] = profile.xhttpMode.wire
+            profile.xhttpExtra?.let { query["extra"] = it.canonicalJson() }
+        } else {
+            profile.wsPath?.let { query["path"] = it }
+            profile.wsHost?.let { query["host"] = it }
+            profile.grpcServiceName?.let { query["serviceName"] = it }
+        }
         profile.extraQuery.forEach { (key, value) -> query.putIfAbsent(key, value) }
         val host = if (':' in profile.host && !profile.host.startsWith('[')) "[${profile.host}]" else profile.host
         val encodedQuery = query.entries.joinToString("&") { "${encode(it.key)}=${encode(it.value)}" }

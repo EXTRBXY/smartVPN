@@ -33,6 +33,7 @@ object UserErrorText {
         VpnError.LinkInvalidHostOrPort -> R.string.user_error_invalid_host_or_port
         VpnError.LinkUnsupported -> R.string.user_error_link_unsupported
         VpnError.LinkRealityIncomplete -> R.string.user_error_reality_profile
+        VpnError.XhttpInvalid -> R.string.user_error_xhttp_invalid
 
         VpnError.PerAppRequiresPackages, VpnError.InvalidPackageName, VpnError.TooManyPackages ->
             R.string.user_error_split_tunnel_packages

@@ -43,7 +43,8 @@
     <string name="user_error_invalid_uuid">Invalid UUID in the link.</string>
     <string name="user_error_invalid_host_or_port">Check the server address and port in the link.</string>
     <string name="user_error_link_invalid">The link is damaged or incomplete.</string>
-    <string name="user_error_link_unsupported">Link parameters are not supported (requires encryption=none, tls/reality/none, tcp/ws/grpc).</string>
+    <string name="user_error_link_unsupported">Link parameters are not supported (requires encryption=none, tls/reality/none, tcp/ws/grpc/xhttp).</string>
+    <string name="user_error_xhttp_invalid">XHTTP parameters are not supported.</string>
     <string name="user_error_profile_delete_requires_disconnect">Disconnect VPN before deleting the active profile.</string>
     <string name="user_error_profile_name_required">Enter a profile name.</string>
     <string name="user_error_profile_host_required">Enter the server address.</string>

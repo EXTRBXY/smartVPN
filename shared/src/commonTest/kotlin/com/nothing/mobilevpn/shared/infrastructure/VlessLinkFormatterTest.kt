@@ -3,6 +3,9 @@ package com.nothing.mobilecore.shared.infrastructure
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VlessSecurity
 import com.nothing.mobilecore.shared.domain.VlessTransport
+import com.nothing.mobilecore.shared.domain.XhttpExtra
+import com.nothing.mobilecore.shared.domain.XhttpMode
+import com.nothing.mobilecore.shared.domain.XhttpXmux
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -42,5 +45,33 @@ class VlessLinkFormatterTest {
         val link = VlessLinkFormatter.format(source)
         assertTrue(link.contains("@[2001:db8::1]:443"))
         assertEquals(source.host, VlessLinkParser.parse(link).host)
+    }
+
+    @Test
+    fun roundTrip_xhttpDropsFlowAndKeepsExtra() {
+        val source = VlessProfile(
+            id = "test",
+            name = "xhttp",
+            uuid = "12345678-1234-4123-8123-123456789abc",
+            host = "example.com",
+            port = 443,
+            type = VlessTransport.XHTTP,
+            security = VlessSecurity.TLS,
+            flow = "xtls-rprx-vision",
+            xhttpPath = "/xhttp",
+            xhttpHost = "cdn.example",
+            xhttpMode = XhttpMode.PACKET_UP,
+            xhttpExtra = XhttpExtra(
+                xPaddingBytes = "100-200",
+                xmux = XhttpXmux(maxConcurrency = "8-16"),
+            ),
+        )
+        val restored = VlessLinkParser.parse(VlessLinkFormatter.format(source))
+        assertEquals(VlessTransport.XHTTP, restored.type)
+        assertEquals(null, restored.flow)
+        assertEquals("/xhttp", restored.xhttpPath)
+        assertEquals("cdn.example", restored.xhttpHost)
+        assertEquals(XhttpMode.PACKET_UP, restored.xhttpMode)
+        assertEquals(source.xhttpExtra, restored.xhttpExtra)
     }
 }

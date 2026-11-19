@@ -45,13 +45,19 @@ class StorageCompatibilityTest {
         // Старая форма позволяла сохранить security свободным текстом; компилятор тогда
         // собирал всё, кроме none/reality, как TLS. Прочитать список целиком важнее строгости.
         val legacy = """[
-            {"id":"a","name":"n","uuid":"","host":"h","port":1,"type":"xhttp","security":"xtls"},
+            {"id":"a","name":"n","uuid":"","host":"h","port":1,"type":"kcp","security":"xtls"},
             {"id":"b","name":"n","uuid":"","host":"h","port":1,"type":" WS ","security":"Reality "}
         ]"""
 
         val profiles = json.decodeFromString(ListSerializer(VlessProfile.serializer()), legacy)
 
         assertEquals(VlessTransport.TCP, profiles[0].type)
+        val xhttp = json.decodeFromString(
+            ListSerializer(VlessProfile.serializer()),
+            """[{"id":"c","name":"n","uuid":"","host":"h","port":1,"type":"xhttp"}]""",
+        ).single()
+        assertEquals(VlessTransport.XHTTP, xhttp.type)
+        assertEquals(XhttpMode.AUTO, xhttp.xhttpMode)
         assertEquals(VlessSecurity.TLS, profiles[0].security)
         assertEquals(VlessTransport.WS, profiles[1].type)
         assertEquals(VlessSecurity.REALITY, profiles[1].security)

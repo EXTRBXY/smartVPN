@@ -5,6 +5,10 @@ import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VlessSecurity
 import com.nothing.mobilecore.shared.domain.VlessTransport
 import com.nothing.mobilecore.shared.domain.VlessUuid
+import com.nothing.mobilecore.shared.domain.XhttpExtra
+import com.nothing.mobilecore.shared.domain.XhttpMode
+import com.nothing.mobilecore.shared.domain.XhttpPolicy
+import com.nothing.mobilecore.shared.domain.canonicalJson
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.ensure
 import com.nothing.mobilecore.shared.domain.vpnFail
@@ -27,10 +31,16 @@ object VlessLinkParser {
         val name = if (rawFragment.isNullOrBlank()) "$host:$port" else decodeUrl(rawFragment)
 
         val query = parseQuery(uri.query)
-        val type = VlessTransport.parse(query["type"] ?: VlessTransport.TCP.wire) ?: vpnFail(VpnError.LinkUnsupported)
+        val rawType = query["type"]?.trim().orEmpty().ifEmpty { VlessTransport.TCP.wire }
+        val type = if (rawType.equals("splithttp", ignoreCase = true)) {
+            VlessTransport.XHTTP
+        } else {
+            VlessTransport.parse(rawType) ?: vpnFail(VpnError.LinkUnsupported)
+        }
         val security = VlessSecurity.parse(query["security"] ?: VlessSecurity.TLS.wire) ?: vpnFail(VpnError.LinkUnsupported)
         val encryption = VlessEncryption.parse(query["encryption"] ?: VlessEncryption.NONE.wire)
             ?: vpnFail(VpnError.LinkUnsupported)
+        val xhttp = type == VlessTransport.XHTTP
 
         val fingerprint = query["fp"]?.trim()?.takeIf { it.isNotEmpty() }
         val sni = query["sni"] ?: query["serverName"] ?: query["servername"]
@@ -44,13 +54,36 @@ object VlessLinkParser {
         }
         val pbk = query["pbk"]?.trim()?.takeIf { it.isNotEmpty() }
         val sid = query["sid"]?.trim()?.takeIf { it.isNotEmpty() }
-        val wsPath = query["path"]?.trim()?.takeIf { it.isNotEmpty() }
-        val wsHost = query["host"]?.trim()?.takeIf { it.isNotEmpty() }
+        val path = query["path"]?.trim()?.takeIf { it.isNotEmpty() }
+        val hostHeader = query["host"]?.trim()?.takeIf { it.isNotEmpty() }
         val grpcService = (query["serviceName"] ?: query["servicename"])?.trim()?.takeIf { it.isNotEmpty() }
+        val parsedExtra = if (xhttp) XhttpExtraParser.parse(query["extra"]) else null
+        val paddingQuery = (query["x_padding_bytes"] ?: query["xPaddingBytes"])?.trim()?.takeIf { it.isNotEmpty() }
+        val xhttpExtra = if (xhttp) {
+            val fromExtra = parsedExtra?.extra
+            when {
+                paddingQuery == null -> fromExtra
+                fromExtra?.xPaddingBytes == null -> (fromExtra ?: XhttpExtra()).copy(xPaddingBytes = paddingQuery)
+                fromExtra.xPaddingBytes != paddingQuery -> vpnFail(VpnError.XhttpInvalid)
+                else -> fromExtra
+            }
+        } else {
+            null
+        }
+        val xhttpMode = if (xhttp) {
+            val queryMode = query["mode"]?.trim()?.takeIf { it.isNotEmpty() }
+            val extraMode = parsedExtra?.mode?.trim()?.takeIf { it.isNotEmpty() }
+            if (queryMode != null && extraMode != null && !queryMode.equals(extraMode, ignoreCase = true)) {
+                vpnFail(VpnError.XhttpInvalid)
+            }
+            XhttpMode.parse(queryMode ?: extraMode ?: XhttpMode.AUTO.wire) ?: vpnFail(VpnError.XhttpInvalid)
+        } else {
+            XhttpMode.AUTO
+        }
 
         val extra = linkedMapOf<String, String>()
         for ((k, v) in query) {
-            if (!isKnownKey(k)) extra[k] = v
+            if (!isKnownKey(k, xhttp)) extra[k] = v
         }
 
         if (security == VlessSecurity.REALITY) {
@@ -71,14 +104,19 @@ object VlessLinkParser {
             sni = sniTrim,
             alpn = alpn,
             fingerprint = fingerprint,
-            flow = flow,
+            flow = if (xhttp) null else flow,
             realityPublicKey = pbk,
             realityShortId = sid,
-            wsPath = wsPath,
-            wsHost = wsHost,
-            grpcServiceName = grpcService,
+            wsPath = if (xhttp) null else path,
+            wsHost = if (xhttp) null else hostHeader,
+            grpcServiceName = if (xhttp) null else grpcService,
+            xhttpPath = if (xhttp) path else null,
+            xhttpHost = if (xhttp) hostHeader else null,
+            xhttpMode = xhttpMode,
+            xhttpExtra = xhttpExtra,
             extraQuery = extra,
         )
+        XhttpPolicy.requireValid(profile)
         return profile.copy(id = stableId(profile))
     }
 
@@ -179,12 +217,16 @@ object VlessLinkParser {
         return out
     }
 
-    private fun isKnownKey(key: String): Boolean {
+    private fun isKnownKey(key: String, xhttp: Boolean): Boolean {
         val k = key.lowercase()
-        return k in setOf(
-            "type", "security", "encryption", "fp", "alpn", "sni", "servername", "flow",
-            "pbk", "sid", "path", "host", "servicename",
-        ) || key == "serverName"
+        if (k in setOf(
+                "type", "security", "encryption", "fp", "alpn", "sni", "servername", "flow",
+                "pbk", "sid", "path", "host", "servicename",
+            ) || key == "serverName"
+        ) {
+            return true
+        }
+        return xhttp && k in setOf("mode", "extra", "x_padding_bytes", "xpaddingbytes")
     }
 
     private fun sanitizeName(name: String): String {
@@ -194,7 +236,12 @@ object VlessLinkParser {
     }
 
     private fun stableId(p: VlessProfile): String {
-        val key = "${p.uuid}|${p.host}|${p.port}|${p.type.wire}|${p.security.wire}|${p.sni}|${p.flow}|${p.wsPath}|${p.wsHost}|${p.grpcServiceName}"
+        val xhttpKey = if (p.type == VlessTransport.XHTTP) {
+            "|${p.xhttpPath}|${p.xhttpHost}|${p.xhttpMode.wire}|${p.xhttpExtra?.canonicalJson().orEmpty()}"
+        } else {
+            ""
+        }
+        val key = "${p.uuid}|${p.host}|${p.port}|${p.type.wire}|${p.security.wire}|${p.sni}|${p.flow}|${p.wsPath}|${p.wsHost}|${p.grpcServiceName}$xhttpKey"
         val hash = key.encodeToByteArray().toByteString().sha256().hex()
         return hash.take(16).lowercase()
     }

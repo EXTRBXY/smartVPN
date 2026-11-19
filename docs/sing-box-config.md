@@ -1,6 +1,6 @@
 # Генерация конфигурации sing-box
 
-Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Версия ядра в `libbox.aar` — стабильная **`v1.14.3`** (Go 1.26.2, только `arm64-v8a`), собрана `scripts/build-libbox-aar.ps1` из тега; единственная локальная правка в дереве sing-box — разделитель `PATH` для NDK на Windows в скрипте сборки, код ядра не изменён. Проверить: строка `1.14.3` в `jni/arm64-v8a/libbox.so`. Перед обновлением ядра сверяться с https://sing-box.sagernet.org/changelog/ — Android-API libbox меняется между версиями. Лицензия — `third_party/sing-box/LICENSE`; формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
+Класс: `shared/.../infrastructure/SingBoxConfigCompiler.kt`. Вход — `VlessProfile` + `TunnelPolicy`, выход — компактная JSON-строка (`Json { prettyPrint = false }`). Ядро в `libbox.aar` — **`v1.14.3-extended-2.7.3`** (`shtorm-7/sing-box-extended`, только `arm64-v8a`). Официальный sing-box 1.14.3 транспорта `xhttp` не содержит, поэтому AAR собран из этого дерева. Проверить: строка `1.14.3-extended-2.7.3` в `jni/arm64-v8a/libbox.so`. Перед сменой дерева сверять `experimental/libbox`: `CommandServer` должен совпасть, а новый метод `PlatformInterface` нужно реализовать в `NothingVpnService`. Лицензия ядра — `third_party/sing-box/LICENSE`; формат DNS-серверов (`type`/`server`/`action`) — новый (1.12+).
 
 ## Структура результата
 
@@ -25,7 +25,20 @@
 
 **TLS** (`security != none`): `enabled`, `server_name = sni ?: host`, `alpn`, `utls{enabled, fingerprint}` при `fp`, при `security=reality` — `reality{enabled, public_key, short_id}` (обязательны, иначе ошибки `reality_public_key_missing` / `reality_short_id_missing`).
 
-**Transport**: `tcp` → нет блока; `ws` → `{type: ws, path, headers.Host}`; `grpc` → `{type: grpc, service_name}`.
+**Transport**: `tcp` → нет блока; `ws` → `{type: ws, path, headers.Host}`; `grpc` → `{type: grpc, service_name}`; `xhttp` → блок ниже.
+
+**XHTTP** (`type=xhttp`, в ссылке синоним `splithttp`). Это не второй движок: тот же outbound `vless`, другой `transport`. `flow` в конфиг не пишется (Vision только для TCP). Поля:
+
+| Ссылка / профиль | JSON sing-box |
+|---|---|
+| `path` (`xhttpPath`, иначе `/`) | `transport.path` |
+| `host` (`xhttpHost`) | `transport.host` |
+| `mode` (`auto` / `packet-up` / `stream-up` / `stream-one`) | `transport.mode` |
+| `extra` (типизированный `XhttpExtra`, не сырой JSON) | snake_case того же блока: `x_padding_bytes`, `headers`, `xmux.max_concurrency` и остальные клиентские поля |
+
+`x_padding_bytes` пишется всегда: из профиля или `100-1000`. Ядра с XHTTP отвергают нулевой padding. `downloadSettings` и неизвестные ключи `extra` ссылка не проходит (`xhttp_invalid`). Серверные ключи (`noSSEHeader`, `scMaxBufferedPosts`, …) при импорте отбрасываются.
+
+Схема совпадает с `option/v2ray_transport.go` тега `v1.14.3-extended-2.7.3`: `type = xhttp`, `mode`, `path`, `host`, обязательный `x_padding_bytes`, остальные поля extra — по наличию. `xmux` не пишется, пока пользователь его не задал: любое заданное поле отключает остальные значения по умолчанию ядра. `bindInterfaceControl` в этом дереве вызывается только для опции `bind_interface`, которой наши профили не задают; реализация всё равно защищает сокет через `VpnService.protect`, как `autoDetectInterfaceControl`.
 
 ### dns
 | `dnsMode` | Результат |

@@ -5,15 +5,15 @@
 ## domain
 
 ### `VlessProfile`
-`@Serializable data class`. Поля: `id`, `name`, `uuid`, `host`, `port`, `type: VlessTransport` (`tcp|ws|grpc`), `security: VlessSecurity` (`tls|reality|none`), `encryption: VlessEncryption` (только `none`), `sni`, `alpn`, `fingerprint` (uTLS), `flow`, `realityPublicKey` (`pbk`), `realityShortId` (`sid`), `wsPath`, `wsHost`, `grpcServiceName`, `extraQuery` (неизвестные параметры ссылки), `favorite`, `sortOrder`.
+`@Serializable data class`. Поля: `id`, `name`, `uuid`, `host`, `port`, `type: VlessTransport` (`tcp|ws|grpc|xhttp`), `security: VlessSecurity` (`tls|reality|none`), `encryption: VlessEncryption` (только `none`), `sni`, `alpn`, `fingerprint` (uTLS), `flow`, `realityPublicKey` (`pbk`), `realityShortId` (`sid`), `wsPath`, `wsHost`, `grpcServiceName`, `xhttpPath`, `xhttpHost`, `xhttpMode` (`auto|packet-up|stream-up|stream-one`), `xhttpExtra` (типизированный extra XHTTP), `extraQuery` (неизвестные параметры ссылки), `favorite`, `sortOrder`.
 Секретные поля: `uuid`, `realityPublicKey`, `realityShortId` — репозиторий хранит их отдельно (см. [data-and-storage.md](data-and-storage.md)).
 
 `VlessUuid.isValid` — единая проверка UUID (версии 1–8) для парсера и формы; `VlessProfile.hasCompleteRealityKeys()` — для Reality нужны оба ключа.
 
 ### Enum со строковым представлением (`WireEnums.kt`)
-`VlessTransport`, `VlessSecurity`, `VlessEncryption`, `TunStack`, `SingBoxLogLevel` реализуют `WireValue` (`wire` — строка в ссылке, конфиге и хранилище). `LenientWireSerializer` пишет `wire` (JSON совпадает с прежним, когда поля были `String`) и читает мягко: trim, без учёта регистра, неизвестное значение → fallback (`TCP`, `TLS`, `NONE`, `MIXED`, `INFO`) — то, во что прежний компилятор превращал нераспознанную строку. Так одно испорченное поле не делает нечитаемым весь список профилей. Строгий разбор для ссылок и ввода — `parse()`/`fromWire()` (null → ошибка). Покрыто `StorageCompatibilityTest`.
+`VlessTransport`, `VlessSecurity`, `VlessEncryption`, `XhttpMode`, `TunStack`, `SingBoxLogLevel` реализуют `WireValue` (`wire` — строка в ссылке, конфиге и хранилище). `LenientWireSerializer` пишет `wire` (JSON совпадает с прежним, когда поля были `String`) и читает мягко: trim, без учёта регистра, неизвестное значение → fallback (`TCP`, `TLS`, `NONE`, `AUTO`, `MIXED`, `INFO`) — то, во что прежний компилятор превращал нераспознанную строку. Так одно испорченное поле не делает нечитаемым весь список профилей. Строгий разбор для ссылок и ввода — `parse()`/`fromWire()` (null → ошибка). Покрыто `StorageCompatibilityTest`. `type: xhttp` в старом JSON теперь читается как `XHTTP`, а не как TCP.
 
-`id` для импортированных профилей — первые 16 hex SHA-256 от `uuid|host|port|type|security|sni|flow|wsPath|wsHost|grpcServiceName` (для enum берётся `wire`-строка, поэтому id совпадают с прежними) (повторный импорт той же ссылки даёт тот же id → upsert, а не дубль). Дубликаты через UI получают случайный UUID.
+`id` для импортированных профилей — первые 16 hex SHA-256 от `uuid|host|port|type|security|sni|flow|wsPath|wsHost|grpcServiceName` (для enum берётся `wire`-строка, поэтому id совпадают с прежними). Для `xhttp` к ключу добавляются `xhttpPath|xhttpHost|mode|canonical extra`; у tcp/ws/grpc ключ прежний. Повторный импорт той же ссылки даёт тот же id → upsert, а не дубль. Дубликаты через UI получают случайный UUID.
 
 ### `TunnelPolicy`
 Единая политика туннеля, сериализуется в JSON, хранится в репозитории и передаётся в сервис через `Intent`-extra.
@@ -75,7 +75,7 @@
 |---|---|
 | `parseLink(link)` | только разбор `vless://` |
 | `importLink(link, activate)` | разбор + сохранение; QR-импорт делает профиль активным |
-| `update(id, draft)` | нормализация (trim; ключи Reality сбрасываются для не-Reality) + валидация (имя, host, порт, UUID v1–8, полнота Reality) + upsert; `id` неизменяем |
+| `update(id, draft)` | нормализация (trim; ключи Reality сбрасываются для не-Reality; у XHTTP сбрасывается `flow` и поля ws/grpc) + валидация (имя, host, порт, UUID v1–8, полнота Reality, `XhttpPolicy`) + upsert; `id` неизменяем |
 | `delete(id)` | запрещено для активного профиля, пока `isTunnelBusy()` (`profile_delete_requires_disconnect`); сбрасывает `activeProfileId` |
 
 ### `VpnPorts.kt`
@@ -87,7 +87,7 @@
 Генерирует JSON для ядра — подробно в [sing-box-config.md](sing-box-config.md). JSON без `prettyPrint` (меньше структуры при дампе).
 
 ### `VlessLinkParser` / `VlessLinkFormatter`
-- Парсер — собственный разбор URI (`vless://uuid@host:port?query#name`), IPv6 в `[...]`, ручной percent-decode (`+` → пробел). Допустимо: `encryption=none`, `security ∈ {tls, reality, none}`, `type ∈ {tcp, ws, grpc}`. Для Reality обязательны `pbk`, `sid`, `sni`. Имена параметров: `sni|serverName|servername`, `serviceName|servicename`, `fp`, `alpn` (разделители `,` и `;`), `flow`, `path`, `host`. Неизвестные параметры сохраняются в `extraQuery`. Имя обрезается до 64 символов.
+- Парсер — собственный разбор URI (`vless://uuid@host:port?query#name`), IPv6 в `[...]`, ручной percent-decode (`+` → пробел). Допустимо: `encryption=none`, `security ∈ {tls, reality, none}`, `type ∈ {tcp, ws, grpc, xhttp}` (`splithttp` → `xhttp`). Для Reality обязательны `pbk`, `sid`, `sni`. Имена параметров: `sni|serverName|servername`, `serviceName|servicename`, `fp`, `alpn` (разделители `,` и `;`), `flow`, `path`, `host`. Для XHTTP ещё `mode`, `extra` (JSON) и `x_padding_bytes`; `flow` сбрасывается. Неизвестный или противоречивый extra — `xhttp_invalid`. У gRPC `mode` по-прежнему остаётся в `extraQuery`. Неизвестные параметры сохраняются в `extraQuery`. Имя обрезается до 64 символов.
 - Форматтер — обратная операция (percent-encode по байтам UTF-8, IPv6 оборачивается в `[]`); требует непустой `uuid`.
 - Ошибки парсера — `VpnException` с `VpnError.Link*`; ссылка не `vless://` → `link_not_vless`.
 

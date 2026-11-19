@@ -2,7 +2,10 @@ package com.nothing.mobilecore.shared.application
 
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VlessSecurity
+import com.nothing.mobilecore.shared.domain.VlessTransport
 import com.nothing.mobilecore.shared.domain.VlessUuid
+import com.nothing.mobilecore.shared.domain.XhttpMode
+import com.nothing.mobilecore.shared.domain.XhttpPolicy
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.ensure
 import com.nothing.mobilecore.shared.domain.hasCompleteRealityKeys
@@ -59,12 +62,21 @@ class ProfileService(
 
     private fun normalize(profile: VlessProfile): VlessProfile {
         val keepReality = profile.security == VlessSecurity.REALITY
+        val xhttp = profile.type == VlessTransport.XHTTP
         return profile.copy(
             name = profile.name.trim(),
             uuid = profile.uuid.trim(),
             host = profile.host.trim(),
+            flow = profile.flow?.trim()?.takeIf { it.isNotEmpty() && !xhttp },
             realityPublicKey = profile.realityPublicKey?.trim()?.takeIf { keepReality && it.isNotEmpty() },
             realityShortId = profile.realityShortId?.trim()?.takeIf { keepReality && it.isNotEmpty() },
+            wsPath = profile.wsPath?.trim()?.takeIf { !xhttp && it.isNotEmpty() },
+            wsHost = profile.wsHost?.trim()?.takeIf { !xhttp && it.isNotEmpty() },
+            grpcServiceName = profile.grpcServiceName?.trim()?.takeIf { !xhttp && it.isNotEmpty() },
+            xhttpPath = profile.xhttpPath?.trim()?.takeIf { xhttp && it.isNotEmpty() },
+            xhttpHost = profile.xhttpHost?.trim()?.takeIf { xhttp && it.isNotEmpty() },
+            xhttpMode = if (xhttp) profile.xhttpMode else XhttpMode.AUTO,
+            xhttpExtra = if (xhttp) profile.xhttpExtra else null,
         )
     }
 
@@ -74,5 +86,6 @@ class ProfileService(
         ensure(profile.port in 1..65535) { VpnError.ProfilePortInvalid }
         ensure(VlessUuid.isValid(profile.uuid)) { VpnError.ProfileUuidInvalid }
         ensure(profile.hasCompleteRealityKeys()) { VpnError.ProfileRealityIncomplete }
+        XhttpPolicy.requireValid(profile)
     }
 }

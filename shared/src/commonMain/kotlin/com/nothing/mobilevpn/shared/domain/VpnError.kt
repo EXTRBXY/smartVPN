@@ -27,6 +27,7 @@ enum class VpnError(val code: String) {
     LinkInvalidHostOrPort("link_invalid_host_or_port"),
     LinkUnsupported("link_unsupported"),
     LinkRealityIncomplete("link_reality_incomplete"),
+    XhttpInvalid("xhttp_invalid"),
 
     // Политика туннеля
     PerAppRequiresPackages("per_app_requires_packages"),
