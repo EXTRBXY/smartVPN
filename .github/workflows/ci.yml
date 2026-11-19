@@ -24,16 +24,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Shared checks
-        run: ./gradlew :shared:check
+        run: bash ./gradlew :shared:check
 
       - name: Android assemble debug
-        run: ./gradlew :androidApp:assembleDebug
+        run: bash ./gradlew :androidApp:assembleDebug
 
       - name: Android unit tests
-        run: ./gradlew :androidApp:testDebugUnitTest
+        run: bash ./gradlew :androidApp:testDebugUnitTest
 
       - name: Android lint
-        run: ./gradlew :androidApp:lintDebug
+        run: bash ./gradlew :androidApp:lintDebug
 
       - name: Upload lint report
         if: failure()
@@ -63,4 +63,4 @@ jobs:
           api-level: 34
           arch: x86_64
           profile: pixel_6
-          script: ./gradlew :androidApp:connectedDebugAndroidTest
+          script: bash ./gradlew :androidApp:connectedDebugAndroidTest

@@ -57,7 +57,7 @@ jobs:
             echo "Нужны secrets RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD."
             exit 1
           fi
-          ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleRelease
+          bash ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleRelease
           apk="androidApp/build/outputs/apk/release/androidApp-release.apk"
           if [ ! -f "$apk" ]; then
             echo "Подписанный APK не появился. Проверьте secrets подписи."
