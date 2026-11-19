@@ -58,9 +58,10 @@ android {
         if (hasReleaseSigning) {
             create("release") {
                 storeFile = file(releaseStoreFile!!)
-                storePassword = releaseStorePassword
-                keyAlias = releaseKeyAlias
-                keyPassword = releaseKeyPassword
+                storePassword = releaseStorePassword!!.trim()
+                keyAlias = releaseKeyAlias!!.trim()
+                // keytool по умолчанию пишет PKCS12: пароль ключа равен паролю хранилища.
+                keyPassword = releaseStorePassword.trim()
             }
         }
     }

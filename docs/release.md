@@ -22,8 +22,8 @@
 | Secret | Что внутри |
 |---|---|
 | `RELEASE_STORE_BASE64` | `base64` от файла keystore, одна строка |
-| `RELEASE_STORE_PASSWORD` | пароль хранилища |
+| `RELEASE_STORE_PASSWORD` | пароль хранилища. Им же открывается ключ: `keytool` без `-storetype` создаёт PKCS12, отдельный пароль ключа там не хранится |
 | `RELEASE_KEY_ALIAS` | alias ключа |
-| `RELEASE_KEY_PASSWORD` | пароль ключа |
+| `RELEASE_KEY_PASSWORD` | тот же пароль, что у хранилища. Сборка подписывает паролем хранилища |
 
 Без них workflow останавливается и не публикует APK, подписанный debug-ключом. `localRelease` по-прежнему только для установки себе.
