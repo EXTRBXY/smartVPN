@@ -1,6 +1,7 @@
 package com.nothing.mobilecore.libbox
 
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -98,6 +99,10 @@ object DefaultNetworkListener {
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            networkActor.trySend(NetworkMessage.Update(network))
+        }
+
+        override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
             networkActor.trySend(NetworkMessage.Update(network))
         }
 

@@ -2,6 +2,7 @@ package com.nothing.mobilecore.platform
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.net.VpnService
 import androidx.core.content.ContextCompat
 import com.nothing.mobilecore.shared.application.SystemVpnPort
@@ -9,22 +10,29 @@ import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnException
-import com.nothing.mobilecore.shared.domain.ensure
-import com.nothing.mobilecore.shared.domain.vpnFail
+import com.nothing.mobilecore.shared.domain.toVpnError
 import com.nothing.mobilecore.vpn.NothingVpnService
 import com.nothing.mobilecore.vpn.TunnelStatusRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.InterruptedIOException
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.Response
 
 class AndroidSystemVpn(
     private val context: Context,
@@ -92,65 +100,69 @@ class AndroidSystemVpn(
         TunnelStatus.Stopping -> false
     }
 
-    override suspend fun smokeCheck(policy: TunnelPolicy): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            try {
-                withTimeout(7_000L) {
-                    LibboxProxyProbe.test("proxy").getOrElse {
-                        throw VpnException(VpnError.SmokeProxyFailed, it)
-                    }
-                    httpProbeWithRetry()
-                    ensure(tunnelStatus.value is TunnelStatus.Running) { VpnError.VpnNotRunningAfterConnect }
-                }
-            } catch (_: TimeoutCancellationException) {
-                vpnFail(VpnError.SmokeTimeout)
+    override suspend fun smokeCheck(policy: TunnelPolicy): Result<Unit> {
+        val started = SystemClock.elapsedRealtime()
+        var httpStatus: Int? = null
+        val result = try {
+            httpStatus = withTimeoutOrNull(SMOKE_TIMEOUT_MS) {
+                // Android может начать маршрутизировать через TUN чуть позже статуса Running.
+                delay(TUN_SETTLE_MS)
+                fetchProbeStatus()
             }
+            val failure = when {
+                httpStatus == null -> VpnError.SmokeTimeout
+                httpStatus != 204 -> VpnError.SmokeProxyFailed
+                tunnelStatus.value !is TunnelStatus.Running -> VpnError.VpnNotRunningAfterConnect
+                else -> null
+            }
+            if (failure == null) Result.success(Unit) else Result.failure(VpnException(failure))
+        } catch (error: CancellationException) {
+            logProbeResult(started, "cancelled", httpStatus)
+            throw error
+        } catch (error: InterruptedIOException) {
+            Result.failure(VpnException(VpnError.SmokeTimeout, error))
+        } catch (error: IOException) {
+            Result.failure(VpnException(VpnError.SmokeProxyFailed, error))
         }
+        logProbeResult(started, result.exceptionOrNull()?.toVpnError()?.code ?: "ok", httpStatus)
+        return result
     }
 
-    /**
-     * Сразу после `Running` VPN-сеть Android и TUN-стек ядра могут быть ещё не готовы принимать
-     * соединения приложения: первый сокет получает «Connection reset». Раньше эту паузу случайно
-     * давала доставка broadcast; теперь повторяем запрос при сетевой ошибке (общий лимит —
-     * таймаут smoke-проверки).
-     */
-    private suspend fun httpProbeWithRetry() {
-        var delayMs = HTTP_PROBE_FIRST_RETRY_MS
-        repeat(HTTP_PROBE_ATTEMPTS - 1) {
-            val result = runCatching { httpProbe() }
-            if (result.isSuccess) return
-            val error = result.exceptionOrNull()
-            if ((error as? VpnException)?.cause !is IOException) throw error!!
-            delay(delayMs)
-            delayMs *= 2
-        }
-        httpProbe()
+    private suspend fun fetchProbeStatus(): Int = suspendCancellableCoroutine { continuation ->
+        val call = smokeHttp.newCall(smokeRequest)
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                continuation.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                continuation.resume(response.use { it.code })
+            }
+        })
     }
 
-    /** HTTP-запрос через туннель, без keep-alive: соединение из пула могло жить в прошлом туннеле. */
-    private fun httpProbe() {
-        val probe = URL("https://www.gstatic.com/generate_204").openConnection() as HttpURLConnection
-        try {
-            probe.connectTimeout = 3_000
-            probe.readTimeout = 3_000
-            probe.instanceFollowRedirects = false
-            probe.useCaches = false
-            probe.setRequestProperty("Connection", "close")
-            val code = try {
-                probe.responseCode
-            } catch (e: IOException) {
-                throw VpnException(VpnError.SmokeProxyFailed, e)
-            }
-            ensure(code == 204) { VpnError.SmokeProxyFailed }
-        } finally {
-            probe.disconnect()
-        }
+    private fun logProbeResult(started: Long, result: String, httpStatus: Int?) {
+        val elapsed = SystemClock.elapsedRealtime() - started
+        val status = httpStatus?.let { ", HTTP $it" }.orEmpty()
+        ConnectionEventLog.add(context, "VPN traffic check: $result in ${elapsed}ms$status")
     }
 
     override fun vpnPermissionNeeded(): Boolean = VpnService.prepare(context) != null
 
     private companion object {
-        const val HTTP_PROBE_ATTEMPTS = 4
-        const val HTTP_PROBE_FIRST_RETRY_MS = 300L
+        const val SMOKE_TIMEOUT_MS = 7_000L
+        const val TUN_SETTLE_MS = 300L
+        val smokeHttp = OkHttpClient.Builder()
+            .callTimeout(SMOKE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(false)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .protocols(listOf(Protocol.HTTP_1_1))
+            .build()
+        val smokeRequest = Request.Builder()
+            .url("https://www.gstatic.com/generate_204")
+            .header("Connection", "close")
+            .build()
     }
 }

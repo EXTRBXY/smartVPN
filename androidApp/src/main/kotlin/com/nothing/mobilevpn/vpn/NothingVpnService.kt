@@ -109,7 +109,10 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
         when (val start = classifyServiceStart(intent?.action)) {
             ServiceStart.Disconnect -> {
                 if (intent?.getBooleanExtra(EXTRA_USER_DISCONNECT, false) == true) {
-                    (application as NothingVpnApp).graph.appPreferences.connectionRequested = false
+                    val app = application as NothingVpnApp
+                    app.graph.appPreferences.connectionRequested = false
+                    app.applicationScope.launch { app.graph.sessionController.disconnectSuspend() }
+                    return START_NOT_STICKY
                 }
                 ConnectionEventLog.add(this, "VPN service: disconnect")
                 requestStop(error = null)
@@ -385,7 +388,7 @@ class NothingVpnService : VpnService(), MobilePlatformInterface {
 
         commandServer = CommandServer(handler, this)
         commandServer.start()
-        DefaultNetworkMonitor.start()
+        DefaultNetworkMonitor.start { event -> ConnectionEventLog.add(this, event) }
 
         commandServer.startOrReloadService(content, buildOverrideOptions(policy))
         sessionConfig = content

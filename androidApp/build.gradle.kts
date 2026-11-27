@@ -33,8 +33,8 @@ android {
         applicationId = providers.gradleProperty("app.applicationId").get()
         minSdk = providers.gradleProperty("android.minSdk").get().toInt()
         targetSdk = providers.gradleProperty("android.targetSdk").get().toInt()
-        versionCode = 4
-        versionName = "1.0.0"
+        versionCode = 5
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -120,6 +120,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.squareup.okhttp3:okhttp:5.3.2")
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")

@@ -6,6 +6,8 @@ import com.nothing.mobilecore.shared.domain.TunnelStatus
 import com.nothing.mobilecore.shared.domain.VlessProfile
 import com.nothing.mobilecore.shared.domain.VpnError
 import com.nothing.mobilecore.shared.domain.VpnSessionState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -200,6 +202,36 @@ class VpnSessionControllerRecoveryTest {
     }
 
     @Test
+    fun disconnectCancelsDirectConnectWhileTrafficCheckIsPending() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val systemVpn = FakeSystemVpn(failStartTimes = 0, beforeSmoke = {
+            entered.complete(Unit)
+            release.await()
+        })
+        val controller = newController(systemVpn)
+        val attempt = async { controller.connectSuspend() }
+
+        withTimeout(2_000) { entered.await() }
+        assertTrue(withTimeout(2_000) { controller.disconnectSuspend() }.isSuccess)
+        release.complete(Unit)
+
+        val cancelled = try {
+            withTimeout(2_000) { attempt.await() }
+            false
+        } catch (error: CancellationException) {
+            assertTrue(attempt.isCancelled)
+            true
+        }
+        assertTrue(cancelled)
+        assertEquals(1, systemVpn.startCalls)
+        assertEquals(VpnSessionState.Disconnected, controller.state.value)
+        assertNull(controller.lastError.value)
+        assertTrue(controller.connectSuspend().isSuccess)
+        assertEquals(2, systemVpn.startCalls)
+    }
+
+    @Test
     fun externalStop_movesConnectedToDisconnectedWithReason() = runBlocking {
         val systemVpn = FakeSystemVpn(failStartTimes = 0)
         val ctrl = newController(systemVpn)
@@ -326,6 +358,7 @@ class VpnSessionControllerRecoveryTest {
         private val failSmokeTimes: Int = 0,
         private val connectDelayMs: Long = 0,
         private val stopDelayMs: Long = 0,
+        private val beforeSmoke: suspend () -> Unit = {},
     ) : SystemVpnPort {
         var startCalls: Int = 0
             private set
@@ -355,6 +388,7 @@ class VpnSessionControllerRecoveryTest {
             return Result.success(Unit)
         }
         override suspend fun smokeCheck(policy: TunnelPolicy): Result<Unit> {
+            beforeSmoke()
             smokeCalls++
             return if (smokeCalls <= failSmokeTimes) {
                 Result.failure(IllegalStateException("smoke_tcp_failed"))

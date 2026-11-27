@@ -10,12 +10,17 @@ import com.nothing.mobilecore.shared.domain.vpnFail
 import com.nothing.mobilecore.shared.domain.validate
 import com.nothing.mobilecore.shared.domain.hasCompleteRealityKeys
 import com.nothing.mobilecore.shared.domain.VpnSessionState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,8 +44,11 @@ class VpnSessionController(
     /** Журнал событий для диагностики; платформа обязана редактировать секреты (см. LogRedaction). */
     private val eventLog: (String) -> Unit = {},
 ) {
-    private var connectJob: Job? = null
     private val connectMutex = Mutex()
+    private val attemptsMutex = Mutex()
+    private val stopGeneration = MutableStateFlow(0L)
+    private val connectAttempts = mutableSetOf<Job>()
+    private var stopsInProgress = 0
 
     private val _state = MutableStateFlow<VpnSessionState>(VpnSessionState.Disconnected)
     val state: StateFlow<VpnSessionState> = _state.asStateFlow()
@@ -66,78 +74,124 @@ class VpnSessionController(
         }
 
     fun connect() {
-        if (connectJob?.isActive == true) return
-        connectJob = scope.launch {
-            connectSuspend()
+        val requestGeneration = stopGeneration.value
+        scope.launch { connectForGeneration(requestGeneration) }
+    }
+
+    suspend fun connectSuspend(): Result<Unit> = connectForGeneration(stopGeneration.value)
+
+    private suspend fun connectForGeneration(requestGeneration: Long): Result<Unit> = withContext(dispatcher) {
+        val job = currentCoroutineContext().job
+        attemptsMutex.withLock {
+            if (stopsInProgress > 0 || stopGeneration.value != requestGeneration) {
+                throw CancellationException("VPN connect superseded by disconnect")
+            }
+            connectAttempts.add(job)
+        }
+        try {
+            connectMutex.withLock {
+                currentCoroutineContext().ensureActive()
+                if (_state.value is VpnSessionState.Connected && systemVpn.tunnelStatus.value is TunnelStatus.Running) {
+                    return@withLock Result.success(Unit)
+                }
+
+                try {
+                    runConnectAttempts()
+                } catch (error: CancellationException) {
+                    // Явное отключение само остановит сервис после выхода из connectMutex.
+                    if (stopGeneration.value == requestGeneration) {
+                        withContext(NonCancellable) {
+                            runCatching { systemVpn.stopVpnAndAwait() }
+                            if (stopGeneration.value == requestGeneration) {
+                                _state.value = VpnSessionState.Disconnected
+                            }
+                        }
+                    }
+                    throw error
+                }
+            }
+        } finally {
+            withContext(NonCancellable) {
+                attemptsMutex.withLock { connectAttempts.remove(job) }
+            }
         }
     }
 
-    suspend fun connectSuspend(): Result<Unit> = withContext(dispatcher) {
-        connectMutex.withLock {
-            if (_state.value is VpnSessionState.Connected && systemVpn.tunnelStatus.value is TunnelStatus.Running) {
-                return@withLock Result.success(Unit)
-            }
-            val policyForAttempts = runCatching { profileRepository.getTunnelPolicy() }.getOrElse { TunnelPolicy() }
-            val maxAttempts = if (policyForAttempts.singleConnectAttempt) 1 else MAX_CONNECT_ATTEMPTS
-            var lastFailure: Throwable? = null
-            repeat(maxAttempts) { index ->
-                val attempt = index + 1
-                _state.value = if (attempt == 1) {
-                    VpnSessionState.Connecting
-                } else {
-                    VpnSessionState.Recovering(attempt = attempt, maxAttempts = maxAttempts)
-                }
-                _lastError.value = null
-                val attemptResult = runCatching {
-                    val profileId = profileRepository.getActiveProfileId()
-                        ?: vpnFail(VpnError.NoActiveProfile)
-                    val profile = profileRepository.listProfiles().find { it.id == profileId }
-                        ?: vpnFail(VpnError.ProfileNotFound)
-                    ensure(profile.uuid.isNotBlank()) { VpnError.ProfileSecretUnavailable }
-                    ensure(profile.hasCompleteRealityKeys()) { VpnError.ProfileSecretUnavailable }
-                    val policy = profileRepository.getTunnelPolicy()
-                    policy.validate().getOrThrow()
-                    val json = configCompiler.compile(profile, policy).getOrElse { throw it }
-                    val path = configWriter.writeSessionConfig(json)
-                    systemVpn.startVpn(policy, path).getOrElse { throw it }
-                    systemVpn.smokeCheck(policy).getOrElse { throw it }
-                    ensure(systemVpn.tunnelStatus.value is TunnelStatus.Running) { VpnError.VpnNotRunningAfterConnect }
-                    _state.value = VpnSessionState.Connected
-                    // Туннель мог упасть между проверкой и записью: сборщик статуса тогда видел
-                    // Connecting и пропустил событие, поэтому перепроверяем после записи.
-                    if (systemVpn.tunnelStatus.value !is TunnelStatus.Running) {
-                        _state.value = VpnSessionState.Connecting
-                        vpnFail(VpnError.VpnNotRunningAfterConnect)
-                    }
-                }
-                if (attemptResult.isSuccess) {
-                    return@withLock Result.success(Unit)
-                }
-                lastFailure = attemptResult.exceptionOrNull()
-                lastFailure?.let { eventLog("Connect attempt $attempt/$maxAttempts failed: ${describeFailure(it)}") }
-                runCatching { systemVpn.stopVpn() }
-                if (attempt < maxAttempts) {
-                    delay(1_000L shl (attempt - 1))
-                }
-            }
-            val error = lastFailure?.toVpnError() ?: VpnError.Unknown
-            _lastError.value = error
-            _state.value = VpnSessionState.Error(error)
-            _state.value = VpnSessionState.Disconnected
-            Result.failure(lastFailure ?: VpnException(error))
+    private suspend fun runConnectAttempts(): Result<Unit> {
+        val policyForAttempts = runCatching { profileRepository.getTunnelPolicy() }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            TunnelPolicy()
         }
+        val maxAttempts = if (policyForAttempts.singleConnectAttempt) 1 else MAX_CONNECT_ATTEMPTS
+        var lastFailure: Throwable? = null
+        for (attempt in 1..maxAttempts) {
+            currentCoroutineContext().ensureActive()
+            _state.value = if (attempt == 1) {
+                VpnSessionState.Connecting
+            } else {
+                VpnSessionState.Recovering(attempt = attempt, maxAttempts = maxAttempts)
+            }
+            _lastError.value = null
+            val attemptResult = runCatching {
+                val profileId = profileRepository.getActiveProfileId()
+                    ?: vpnFail(VpnError.NoActiveProfile)
+                val profile = profileRepository.listProfiles().find { it.id == profileId }
+                    ?: vpnFail(VpnError.ProfileNotFound)
+                ensure(profile.uuid.isNotBlank()) { VpnError.ProfileSecretUnavailable }
+                ensure(profile.hasCompleteRealityKeys()) { VpnError.ProfileSecretUnavailable }
+                val policy = profileRepository.getTunnelPolicy()
+                policy.validate().getOrThrow()
+                val json = configCompiler.compile(profile, policy).getOrElse { throw it }
+                val path = configWriter.writeSessionConfig(json)
+                systemVpn.startVpn(policy, path).getOrElse { throw it }
+                systemVpn.smokeCheck(policy).getOrElse { throw it }
+                currentCoroutineContext().ensureActive()
+                ensure(systemVpn.tunnelStatus.value is TunnelStatus.Running) { VpnError.VpnNotRunningAfterConnect }
+                _state.value = VpnSessionState.Connected
+                // Туннель мог упасть до публикации Connected, когда сборщик пропускал Stopped.
+                if (systemVpn.tunnelStatus.value !is TunnelStatus.Running) {
+                    _state.value = VpnSessionState.Connecting
+                    vpnFail(VpnError.VpnNotRunningAfterConnect)
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            if (attemptResult.isSuccess) return Result.success(Unit)
+
+            lastFailure = attemptResult.exceptionOrNull()
+            if (lastFailure is CancellationException) throw lastFailure
+            lastFailure?.let { eventLog("Connect attempt $attempt/$maxAttempts failed: ${describeFailure(it)}") }
+            val stopFailure = systemVpn.stopVpnAndAwait().exceptionOrNull()
+            if (stopFailure != null) {
+                if (stopFailure is CancellationException) throw stopFailure
+                lastFailure = stopFailure
+                break
+            }
+            if (attempt < maxAttempts) delay(1_000L shl (attempt - 1))
+        }
+        val error = lastFailure?.toVpnError() ?: VpnError.Unknown
+        _lastError.value = error
+        _state.value = VpnSessionState.Error(error)
+        _state.value = VpnSessionState.Disconnected
+        return Result.failure(lastFailure ?: VpnException(error))
     }
 
     suspend fun disconnectSuspend(): Result<Unit> = withContext(dispatcher) {
-        runCatching {
-            connectJob?.cancel()
-            connectJob = null
-            _state.value = VpnSessionState.Disconnecting
-            systemVpn.stopVpnAndAwait().getOrElse { throw it }
-            _state.value = VpnSessionState.Disconnected
-        }.onFailure { e ->
-            _lastError.value = e.toVpnError()
-            _state.value = VpnSessionState.Disconnected
+        withContext(NonCancellable) {
+            attemptsMutex.withLock {
+                stopsInProgress++
+                stopGeneration.value++
+                connectAttempts.forEach { it.cancel() }
+            }
+            try {
+                connectMutex.withLock {
+                    _state.value = VpnSessionState.Disconnecting
+                    runCatching { systemVpn.stopVpnAndAwait().getOrElse { throw it } }
+                        .onFailure { _lastError.value = it.toVpnError() }
+                        .also { _state.value = VpnSessionState.Disconnected }
+                }
+            } finally {
+                attemptsMutex.withLock { stopsInProgress-- }
+            }
         }
     }
 

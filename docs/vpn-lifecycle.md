@@ -40,8 +40,8 @@ UI: vm.connect()                       (connectionRequested = true)
      │              ├─ проверка NeedWIFIState ↔ ACCESS_FINE_LOCATION
      │              └─ publish Running(sessionId, now)   (ошибка → Stopped(sessionId, код))
      ├─ AndroidSystemVpn.smokeCheck                              [IO, таймаут 7 с]
-     │    urlTest("proxy") + GET gstatic generate_204 (без keep-alive, до 4 попыток
-     │    при сетевой ошибке: сразу после Running первый сокет получает RST) + TunnelStatus.Running
+     │    один GET gstatic generate_204 после паузы 300 мс, без keep-alive и редиректов
+     │    отмена закрывает HTTP-вызов, в журнале результат, HTTP-код и длительность
      └─ state = Connected (с перепроверкой, что туннель всё ещё Running)
 ```
 
@@ -49,7 +49,7 @@ UI: vm.connect()                       (connectionRequested = true)
 
 ### Повторы
 - `singleConnectAttempt=true` (по умолчанию; ключ в JSON — `failClosed`): 1 попытка.
-- `singleConnectAttempt=false`: до 3 попыток, состояние `Recovering(attempt, 3)`, паузы 1 с, 2 с. Между попытками вызывается `stopVpn()`.
+- `singleConnectAttempt=false`: до 3 попыток, состояние `Recovering(attempt, 3)`, паузы 1 с, 2 с. Между попытками контроллер ждёт подтверждения остановки.
 - В UI переключатель «Восстанавливать соединение» (`setAutoReconnect`) также записывает `singleConnectAttempt = !enabled` (связь двух настроек осознанная и живёт только в `SettingsViewModel`).
 
 ### Таймауты
@@ -57,15 +57,15 @@ UI: vm.connect()                       (connectionRequested = true)
 |---|---|---|
 | Ожидание результата старта сервиса | 30 с | `vpn_connect_timeout` |
 | Ожидание остановки | 10 с | `vpn_stop_timeout` |
-| Smoke-проверка | 7 с (HTTP: connect/read по 3 с) | `smoke_timeout`, `smoke_proxy_failed` |
+| Smoke-проверка | 7 с на всю проверку | `smoke_timeout`, `smoke_proxy_failed` |
 | TCP-проверки профиля/DNS | 4 с | — |
 
 ## Отключение
 
 1. `vm.disconnect()` / плитка: `connectionRequested = false`.
-2. `disconnectSuspend`: отмена `connectJob`, `Disconnecting`, `AndroidSystemVpn.stopVpnAndAwait`: если туннель уже `Stopped` — сразу успех (сервис не запускается: из фона на Android 8+ это исключение); иначе шлёт `ACTION_DISCONNECT` и ждёт `Stopped`.
+2. `disconnectSuspend`: отмена активной и ожидающих попыток независимо от точки запуска, `Disconnecting`, `AndroidSystemVpn.stopVpnAndAwait`: если туннель уже `Stopped` — сразу успех (сервис не запускается: из фона на Android 8+ это исключение); иначе шлёт `ACTION_DISCONNECT` и ждёт `Stopped`.
 3. Сервис: `requestStop` → `Stopping` → `teardown()` (закрыть TUN, остановить монитор сети, `closeService/close`) → `Stopped(error)` → `stopForeground` → `stopSelf`.
-4. Кнопка «Отключить» в уведомлении шлёт `ACTION_DISCONNECT` с `EXTRA_USER_DISCONNECT=true` (сбрасывает `connectionRequested`).
+4. Кнопка «Отключить» в уведомлении передаёт запрос в тот же контроллер и сбрасывает `connectionRequested`.
 
 `onRevoke` (пользователь/другое приложение отозвало VPN) → тот же путь остановки с `error = vpn_revoked` (пользователь увидит причину). `serviceStop` от ядра — тоже полная остановка сервиса (раньше закрывался только TUN, и статус оставался «работает»).
 
