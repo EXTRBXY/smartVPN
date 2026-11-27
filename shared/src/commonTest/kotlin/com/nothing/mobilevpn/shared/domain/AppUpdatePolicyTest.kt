@@ -9,14 +9,34 @@ import kotlin.test.assertTrue
 
 class AppUpdatePolicyTest {
     @Test
-    fun newerRelease_isOfferedUntilDismissed() {
+    fun newerVersion_isDetected() {
         assertTrue(AppUpdatePolicy.isNewer("1.1.0", "1.0.0"))
         assertTrue(AppUpdatePolicy.isNewer("v1.0.1", "1.0.0"))
         assertFalse(AppUpdatePolicy.isNewer("1.0.0", "1.0.0"))
         assertFalse(AppUpdatePolicy.isNewer("0.9.0", "1.0.0"))
         assertFalse(AppUpdatePolicy.isNewer("not-a-version", "1.0.0"))
-        assertTrue(AppUpdatePolicy.shouldOffer("", "v1.1.0"))
-        assertFalse(AppUpdatePolicy.shouldOffer("v1.1.0", "v1.1.0"))
+    }
+
+    @Test
+    fun dismissedRelease_staysAvailable_andNewerReleaseCanNotify() {
+        val dismissed = AppRelease(
+            tag = "V1.0.1",
+            semver = "1.0.1",
+            notes = "",
+            downloadUrl = "https://github.com/EXTRBXY/smartVPN/releases/download/v1.0.1/NothingMobileVpn.apk",
+        )
+        val latest = dismissed.copy(
+            tag = "v1.0.3",
+            semver = "1.0.3",
+            downloadUrl = dismissed.downloadUrl.replace("v1.0.1", "v1.0.3"),
+        )
+
+        assertFalse(AppUpdatePolicy.shouldNotify("v1.0.1", dismissed.tag))
+        assertEquals(dismissed, AppUpdatePolicy.availableRelease(dismissed, "1.0.0"))
+        assertTrue(AppUpdatePolicy.shouldNotify("v1.0.1", latest.tag))
+        assertEquals(latest, AppUpdatePolicy.availableRelease(latest, "1.0.0"))
+        assertNull(AppUpdatePolicy.availableRelease(dismissed, "1.0.1"))
+        assertNull(AppUpdatePolicy.availableRelease(latest.copy(downloadUrl = "https://example.com/app.apk"), "1.0.0"))
     }
 
     @Test
@@ -43,6 +63,17 @@ class AppUpdatePolicyTest {
             DownloadUrlProblem.FILE_NAME,
             AppUpdatePolicy.downloadUrlProblem("https://github.com/EXTRBXY/smartVPN/releases/download/v1.0.0/other.apk", true),
         )
+    }
+
+    @Test
+    fun downloadUrl_acceptsSignedGitHubRedirect() {
+        val signed = "https://release-assets.githubusercontent.com/github-production-release-asset/1" +
+            "?sp=r&sig=example%2Bsignature%3D&response-content-disposition=attachment%3B%20filename%3DNothingMobileVpn.apk"
+
+        assertNull(AppUpdatePolicy.downloadUrlProblem(signed, requireFileName = false))
+        assertEquals(DownloadUrlProblem.FILE_NAME, AppUpdatePolicy.downloadUrlProblem(signed, requireFileName = true))
+        val unexpectedHost = signed.replace("release-assets.githubusercontent.com", "example.com")
+        assertEquals(DownloadUrlProblem.HOST, AppUpdatePolicy.downloadUrlProblem(unexpectedHost, requireFileName = false))
     }
 
     @Test

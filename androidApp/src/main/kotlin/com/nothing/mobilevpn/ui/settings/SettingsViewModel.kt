@@ -16,12 +16,14 @@ class SettingsViewModel(
     private val updates: AppUpdateController,
     private val versionName: String,
 ) : ViewModel() {
-    val updateOffer = updates.offer
+    val availableUpdate = updates.available
     val updateBusy = updates.busy
+    val updateInstallReady = updates.installReady
+    val updateDownloadProgress = updates.downloadProgress
 
     fun appVersion(): String = versionName
     fun checkForUpdate() = updates.checkNow()
-    fun downloadUpdate() = updates.download()
+    fun prepareUpdateInstall() = updates.prepareInstall()
 
     fun automationSettings(): AutomationSettings = preferences.automation()
     fun currentWifiName(): String? = wifiInfo.currentSsid()

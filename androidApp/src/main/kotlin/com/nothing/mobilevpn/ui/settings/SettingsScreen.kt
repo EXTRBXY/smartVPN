@@ -19,6 +19,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
@@ -44,6 +46,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.nothing.mobilecore.platform.update.UpdateBusy
+import com.nothing.mobilecore.ui.update.UpdateDownloadIndicator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,8 +60,10 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () 
     var healthCheck by rememberSaveable { mutableStateOf(initial.periodicHealthCheck) }
     var trustedWifi by rememberSaveable { mutableStateOf(initial.trustedWifiNames.joinToString("\n")) }
     val currentWifi = remember { vm.currentWifiName() }
-    val updateOffer by vm.updateOffer.collectAsState()
+    val availableUpdate by vm.availableUpdate.collectAsState()
     val updateBusy by vm.updateBusy.collectAsState()
+    val installReady by vm.updateInstallReady.collectAsState()
+    val downloadProgress by vm.updateDownloadProgress.collectAsState()
 
     Scaffold(
         topBar = {
@@ -150,9 +155,6 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () 
                 stringResource(R.string.update_version, vm.appVersion()),
                 style = MaterialTheme.typography.bodySmall,
             )
-            updateOffer?.let { release ->
-                Text(stringResource(R.string.update_available, release.semver))
-            }
             OutlinedButton(
                 onClick = vm::checkForUpdate,
                 enabled = updateBusy == UpdateBusy.IDLE,
@@ -164,17 +166,33 @@ internal fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit, onDns: () 
                     ),
                 )
             }
-            if (updateOffer != null) {
-                Button(
-                    onClick = vm::downloadUpdate,
-                    enabled = updateBusy == UpdateBusy.IDLE,
+            availableUpdate?.let { release ->
+                Card(
                     modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    ),
                 ) {
-                    Text(
-                        stringResource(
-                            if (updateBusy == UpdateBusy.DOWNLOADING) R.string.update_downloading else R.string.update_download,
-                        ),
-                    )
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.update_available, release.semver),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (updateBusy == UpdateBusy.DOWNLOADING) {
+                            UpdateDownloadIndicator(downloadProgress)
+                        } else {
+                            Button(
+                                onClick = vm::prepareUpdateInstall,
+                                enabled = updateBusy == UpdateBusy.IDLE,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(if (installReady) R.string.update_install else R.string.update_download))
+                            }
+                        }
+                    }
                 }
             }
         }

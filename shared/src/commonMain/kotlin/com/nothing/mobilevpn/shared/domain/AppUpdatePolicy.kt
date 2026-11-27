@@ -1,5 +1,7 @@
 package com.nothing.mobilecore.shared.domain
 
+import kotlinx.serialization.Serializable
+
 /**
  * Решение «есть ли более новый релиз и можно ли качать его файл».
  * Сеть и установка — снаружи. Сравнение версий совпадает с десктопным клиентом:
@@ -29,14 +31,21 @@ object AppUpdatePolicy {
         return SemanticVersion.compare(latest, current) > 0
     }
 
-    fun shouldOffer(dismissedTag: String, tag: String): Boolean =
+    fun availableRelease(release: AppRelease?, currentVersion: String): AppRelease? =
+        release?.takeIf {
+            it.tag.isNotBlank() && isNewer(it.semver, currentVersion) &&
+                downloadUrlProblem(it.downloadUrl, requireFileName = true) == null
+        }
+
+    fun shouldNotify(dismissedTag: String, tag: String): Boolean =
         tag.isNotBlank() && !tag.equals(dismissedTag, ignoreCase = true)
 
     /** null — URL годится. [requireFileName] снимается после редиректа: у GitHub финальный адрес без имени файла. */
     fun downloadUrlProblem(raw: String, requireFileName: Boolean): DownloadUrlProblem? {
         val url = raw.trim()
         if (url.isEmpty()) return DownloadUrlProblem.EMPTY
-        val match = HTTPS.matchEntire(url) ?: return DownloadUrlProblem.NOT_ABSOLUTE
+        val match = HTTPS.matchEntire(url.substringBefore('?').substringBefore('#'))
+            ?: return DownloadUrlProblem.NOT_ABSOLUTE
         if (!match.groupValues[1].equals("https", ignoreCase = true)) return DownloadUrlProblem.NOT_HTTPS
         val host = match.groupValues[2]
         if (host.isEmpty() || host.any { it == '@' || it == ':' || it == '\\' || it.isWhitespace() }) {
@@ -44,7 +53,7 @@ object AppUpdatePolicy {
         }
         if (allowedHosts.none { it.equals(host, ignoreCase = true) }) return DownloadUrlProblem.HOST
         if (!requireFileName) return null
-        val name = match.groupValues[3].substringBefore('?').substringBefore('#').substringAfterLast('/')
+        val name = match.groupValues[3].substringAfterLast('/')
         return if (name.equals(ASSET_NAME, ignoreCase = true)) null else DownloadUrlProblem.FILE_NAME
     }
 
@@ -92,6 +101,7 @@ object SemanticVersion {
     private data class Parts(val major: Int, val minor: Int, val patch: Int)
 }
 
+@Serializable
 data class AppRelease(
     val tag: String,
     val semver: String,

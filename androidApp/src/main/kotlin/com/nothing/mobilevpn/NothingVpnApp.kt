@@ -28,7 +28,6 @@ class NothingVpnApp : Application() {
         LibboxAndroidBootstrap.ensureSetup()
         automation.start()
         graph.tunnelStatsMonitor.start()
-        graph.appUpdates.start(applicationScope)
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(
             NotificationChannel(
@@ -44,6 +43,7 @@ class NothingVpnApp : Application() {
                 NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )
+        graph.appUpdates.start(applicationScope)
     }
 
     /**

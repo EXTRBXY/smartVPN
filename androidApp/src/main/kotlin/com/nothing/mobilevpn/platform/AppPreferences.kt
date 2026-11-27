@@ -1,6 +1,7 @@
 package com.nothing.mobilecore.platform
 
 import com.nothing.mobilecore.platform.storage.VaultStore
+import com.nothing.mobilecore.shared.domain.AppRelease
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -35,10 +36,13 @@ data class AppSettings(
     /** Пользователь хочет, чтобы VPN был включён (для автоматизации: переподключение, загрузка). */
     val connectionRequested: Boolean = false,
     /** Момент последней успешной проверки GitHub, миллисекунды UTC. 0 — ещё не проверяли. */
-    val updateLastCheckEpochMs: Long = 0,
-    /** Тег релиза, от которого пользователь отказался кнопкой «Позже». */
+    val lastUpdateCheck: StoredUpdateCheck? = null,
+    /** Тег релиза, напоминание о котором закрыли кнопкой «Позже». */
     val updateDismissedTag: String = "",
 )
+
+@Serializable
+data class StoredUpdateCheck(val checkedAtEpochMs: Long, val release: AppRelease?)
 
 /**
  * Настройки автоматизации, наборы приложений и намерение «VPN нужен». Живут в [VaultStore]
@@ -101,11 +105,12 @@ class AppPreferences internal constructor(
         get() = current.connectionRequested
         set(value) = write { it.copy(connectionRequested = value) }
 
-    fun updateLastCheckEpochMs(): Long = current.updateLastCheckEpochMs
+    fun lastUpdateCheck(): StoredUpdateCheck? = current.lastUpdateCheck
 
     fun updateDismissedTag(): String = current.updateDismissedTag
 
-    fun recordUpdateCheck(epochMs: Long) = write { it.copy(updateLastCheckEpochMs = epochMs) }
+    fun recordUpdateCheck(epochMs: Long, release: AppRelease?) =
+        write { it.copy(lastUpdateCheck = StoredUpdateCheck(epochMs, release)) }
 
     fun dismissUpdate(tag: String) = write { it.copy(updateDismissedTag = tag) }
 

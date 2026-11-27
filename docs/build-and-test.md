@@ -6,7 +6,7 @@
 - Для iOS-таргетов `shared` нужен macOS; на Windows они пропускаются (`kotlin.native.ignoreDisabledTargets=true`).
 
 ## Версии и параметры (`gradle.properties`, `build.gradle.kts`)
-AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compileSdk 37 · targetSdk 35 · minSdk 26 (в `gradle.properties`) · JVM 17 · `org.gradle.jvmargs=-Xmx3g` · `versionCode`/`versionName` — в `androidApp/build.gradle.kts` (сейчас 1.0.1 / 5). Публикация подписанного APK — [release.md](release.md).
+AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compileSdk 37 · targetSdk 35 · minSdk 26 (в `gradle.properties`) · JVM 17 · `org.gradle.jvmargs=-Xmx3g` · `versionCode`/`versionName` — в `androidApp/build.gradle.kts` (сейчас 1.0.2 / 6). Публикация подписанного APK — [release.md](release.md).
 
 ## Команды
 
@@ -40,7 +40,7 @@ AGP 9.2.1 · Kotlin 2.2.10 (+compose и serialization плагины) · compile
 ## CI (`.github/workflows/ci.yml`)
 Триггеры: PR, push в `main`/`master`.
 - Job `build` (ubuntu, JDK 17 temurin): `:shared:check` → `:androidApp:assembleDebug` → `:androidApp:testDebugUnitTest` → `:androidApp:lintDebug` (HTML-отчёт выкладывается артефактом).
-- Job `instrumented-tests`: эмулятор API 34 x86_64 (pixel_6), `:androidApp:connectedDebugAndroidTest`.
+- Job `instrumented-tests`: эмулятор Google APIs 35 x86_64 (pixel_6) с поддержкой приложений ARM64, `:androidApp:connectedDebugAndroidTest`.
 - Замечание: README рекомендует локально `:shared:testAndroidHostTest`, CI — `:shared:check` (включает его). Сборке нужна платформа SDK 37; на раннере её доставляет AGP/SDK-менеджер — если CI упадёт на отсутствии `android-37.0`, добавить шаг установки платформы.
 
 ## Тесты

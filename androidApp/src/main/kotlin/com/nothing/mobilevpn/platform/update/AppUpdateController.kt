@@ -16,7 +16,6 @@ import com.nothing.mobilecore.platform.AppPreferences
 import com.nothing.mobilecore.shared.domain.AppRelease
 import com.nothing.mobilecore.shared.domain.AppUpdatePolicy
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -52,24 +51,29 @@ class AppUpdateController(
     private val currentVersion: String,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val offerState = MutableStateFlow<AppRelease?>(null)
+    private val availableState = MutableStateFlow<AppRelease?>(null)
+    private val promptState = MutableStateFlow<AppRelease?>(null)
     private val busyState = MutableStateFlow(UpdateBusy.IDLE)
+    private val installReadyState = MutableStateFlow(false)
+    private val downloadProgressState = MutableStateFlow<UpdateDownloadProgress?>(null)
     private val signalsState = MutableSharedFlow<UpdateSignal>(extraBufferCapacity = 4)
     private val gate = Mutex()
-    private val dismissedTag = AtomicReference<String?>(null)
+    private var dismissedTag = ""
+    private var lastCheckAt: Long? = null
     private lateinit var scope: CoroutineScope
 
-    val offer: StateFlow<AppRelease?> = offerState.asStateFlow()
+    val available: StateFlow<AppRelease?> = availableState.asStateFlow()
+    val prompt: StateFlow<AppRelease?> = promptState.asStateFlow()
     val busy: StateFlow<UpdateBusy> = busyState.asStateFlow()
+    val installReady: StateFlow<Boolean> = installReadyState.asStateFlow()
+    val downloadProgress: StateFlow<UpdateDownloadProgress?> = downloadProgressState.asStateFlow()
     val signals: SharedFlow<UpdateSignal> = signalsState.asSharedFlow()
 
     fun start(scope: CoroutineScope) {
         this.scope = scope
-        scope.launch {
-            preferences.awaitReady()
-            dismissedTag.compareAndSet(null, preferences.updateDismissedTag())
+        scope.launch(Dispatchers.Main.immediate) {
             while (isActive) {
-                check(force = false)
+                check(manual = false)
                 delay(AppUpdatePolicy.POLL_INTERVAL_MS)
             }
         }
@@ -77,69 +81,94 @@ class AppUpdateController(
 
     fun checkNow() {
         if (!::scope.isInitialized) return
-        scope.launch { check(force = true) }
+        scope.launch(Dispatchers.Main.immediate) { check(manual = true) }
     }
 
-    fun dismiss() {
-        val tag = offerState.value?.tag ?: return
-        dismissedTag.set(tag)
+    fun dismiss(tag: String) {
+        if (promptState.value?.tag != tag) return
+        dismissedTag = tag
         preferences.dismissUpdate(tag)
-        offerState.value = null
+        promptState.value = null
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
 
-    fun download() {
-        val release = offerState.value ?: return
+    fun prepareInstall() {
         if (!::scope.isInitialized) return
-        scope.launch {
+        scope.launch(Dispatchers.Main.immediate) {
             if (!gate.tryLock()) return@launch
-            busyState.value = UpdateBusy.DOWNLOADING
             try {
-                val file = withContext(Dispatchers.IO) { downloader.download(release) }
+                val release = availableState.value ?: return@launch
+                val cached = withContext(Dispatchers.IO) { downloader.cached(release) }
+                val file = cached ?: run {
+                    installReadyState.value = false
+                    busyState.value = UpdateBusy.DOWNLOADING
+                    withContext(Dispatchers.IO) {
+                        downloader.download(release) { downloadProgressState.value = it }
+                    }
+                }
+                installReadyState.value = true
                 signalsState.tryEmit(UpdateSignal.Install(file))
             } catch (_: IOException) {
                 signalsState.tryEmit(UpdateSignal.DownloadFailed)
             } finally {
                 busyState.value = UpdateBusy.IDLE
+                downloadProgressState.value = null
                 gate.unlock()
             }
         }
     }
 
-    private suspend fun check(force: Boolean) {
+    private suspend fun check(manual: Boolean) {
         if (!gate.tryLock()) return
         try {
-            if (!force && !AppUpdatePolicy.isCheckDue(preferences.updateLastCheckEpochMs(), clock())) return
+            if (lastCheckAt == null) {
+                preferences.awaitReady()
+                dismissedTag = preferences.updateDismissedTag()
+                val cached = preferences.lastUpdateCheck()
+                setAvailableRelease(AppUpdatePolicy.availableRelease(cached?.release, currentVersion))
+                lastCheckAt = when {
+                    cached == null -> 0
+                    cached.release != null && availableState.value == null -> 0
+                    else -> cached.checkedAtEpochMs
+                }
+            }
+            if (!manual && !AppUpdatePolicy.isCheckDue(checkNotNull(lastCheckAt), clock())) return
             busyState.value = UpdateBusy.CHECKING
             val release = try {
                 withContext(Dispatchers.IO) { client.latest() }
             } catch (_: IOException) {
-                if (force) signalsState.tryEmit(UpdateSignal.CheckFailed)
+                if (manual) signalsState.tryEmit(UpdateSignal.CheckFailed)
                 return
             }
-            preferences.recordUpdateCheck(clock())
-            val dismissed = dismissedTag.get().orEmpty()
-            val offer = release?.takeIf {
-                AppUpdatePolicy.isNewer(it.semver, currentVersion) &&
-                    AppUpdatePolicy.shouldOffer(dismissed, it.tag) &&
-                    AppUpdatePolicy.downloadUrlProblem(it.downloadUrl, requireFileName = true) == null
-            }
-            publish(offer)
-            if (force && offer == null) signalsState.tryEmit(UpdateSignal.UpToDate)
+            val checkedAt = clock()
+            val available = AppUpdatePolicy.availableRelease(release, currentVersion)
+            lastCheckAt = checkedAt
+            preferences.recordUpdateCheck(checkedAt, available)
+            publish(available, manual)
+            if (manual && available == null) signalsState.tryEmit(UpdateSignal.UpToDate)
         } finally {
             busyState.value = UpdateBusy.IDLE
             gate.unlock()
         }
     }
 
-    private fun publish(release: AppRelease?) {
-        val previous = offerState.value
-        offerState.value = release
-        if (release == null) {
+    private suspend fun setAvailableRelease(release: AppRelease?) {
+        installReadyState.value = release != null && withContext(Dispatchers.IO) { downloader.cached(release) != null }
+        availableState.value = release
+    }
+
+    private suspend fun publish(release: AppRelease?, manual: Boolean) {
+        val previousTag = availableState.value?.tag
+        setAvailableRelease(release)
+        if (previousTag != release?.tag) {
+            promptState.value = null
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
-            return
         }
-        if (previous?.tag == release.tag) return
+        if (release == null || manual || previousTag == release.tag ||
+            !AppUpdatePolicy.shouldNotify(dismissedTag, release.tag)
+        ) return
+
+        promptState.value = release
         val open = PendingIntent.getActivity(
             context,
             0,

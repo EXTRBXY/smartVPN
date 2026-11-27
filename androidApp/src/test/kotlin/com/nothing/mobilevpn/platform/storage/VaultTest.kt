@@ -5,6 +5,8 @@ import com.nothing.mobilecore.platform.AppSettings
 import com.nothing.mobilecore.platform.AutomationSettings
 import com.nothing.mobilecore.platform.ProfileRepositoryAndroid
 import com.nothing.mobilecore.platform.RoutingRuleSet
+import com.nothing.mobilecore.platform.StoredUpdateCheck
+import com.nothing.mobilecore.shared.domain.AppRelease
 import com.nothing.mobilecore.shared.domain.RoutingMode
 import com.nothing.mobilecore.shared.domain.TunnelPolicy
 import com.nothing.mobilecore.shared.domain.VlessProfile
@@ -85,6 +87,32 @@ class VaultTest {
     )
 
     private fun vaultFile() = VaultFile(tmp.root.resolve("vault/state.bin"), cipher)
+
+    @Test
+    fun updateCheck_roundTripsWithCachedRelease() {
+        val release = AppRelease(
+            tag = "v1.0.1",
+            semver = "1.0.1",
+            notes = "",
+            downloadUrl = "https://github.com/EXTRBXY/smartVPN/releases/download/v1.0.1/NothingMobileVpn.apk",
+        )
+        val settings = AppSettings(
+            lastUpdateCheck = StoredUpdateCheck(1_000, release),
+            updateDismissedTag = release.tag,
+        )
+        val vault = StoredVault(settings = settings)
+
+        assertEquals(settings, StoredVault.decode(StoredVault.encode(vault)).settings)
+    }
+
+    @Test
+    fun updateCheck_fromOldSettingsKeepsDismissalAndRequiresInitialRefresh() {
+        val legacy = """{"settings":{"updateLastCheckEpochMs":1000,"updateDismissedTag":"v1.0.1"}}"""
+        val settings = StoredVault.decode(legacy.encodeToByteArray()).settings
+
+        assertNull(settings.lastUpdateCheck)
+        assertEquals("v1.0.1", settings.updateDismissedTag)
+    }
 
     @Test
     fun file_roundTripsAndLeavesNoTempFile() {
