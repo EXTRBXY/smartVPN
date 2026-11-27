@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-adb shell getprop ro.product.cpu.abilist | grep -qw arm64-v8a
+adb shell getprop ro.product.cpu.abi | grep -qw x86_64
 
-if bash ./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.injected.build.abi=arm64-v8a; then
+if bash ./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.injected.build.abi=x86_64; then
     exit 0
 else
     status=$?

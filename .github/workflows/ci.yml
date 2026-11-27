@@ -73,6 +73,20 @@ jobs:
           test -r /dev/kvm
           test -w /dev/kvm
 
+      - name: Prepare x86_64 libbox for Android tests
+        env:
+          SFA_VERSION: '1.14.3-extended-2.7.3'
+          SFA_X86_64_SHA256: f1d6abcabe306b4f1616e9646b2fdbedf4c48f8308fa71ad08341ab5deff49c9
+        run: |
+          apk="$RUNNER_TEMP/SFA-x86_64.apk"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/shtorm-7/sing-box-extended/releases/download/v${SFA_VERSION}/SFA-${SFA_VERSION}-x86_64.apk" \
+            --output "$apk"
+          printf '%s  %s\n' "$SFA_X86_64_SHA256" "$apk" | sha256sum --check
+          jni_dir=androidApp/src/debug/jniLibs/x86_64
+          mkdir -p "$jni_dir"
+          unzip -p "$apk" lib/x86_64/libbox.so > "$jni_dir/libbox.so"
+
       - name: Run androidTest on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
